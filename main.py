@@ -2,6 +2,7 @@ import requests
 from datetime import datetime
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.signal import iirnotch, filtfilt
 import time
 
 def PlotReadout(read, time, no_of_experiments):
@@ -33,6 +34,38 @@ def WriteToTXT(myarray, filename = "out.txt"):
         raise TypeError("Input must be a numpy array")
     
     np.savetxt(filename, myarray, fmt="%.8e", delimiter=",")
+
+def ApplyNotchFilter(raw_signal, fs):
+
+    """
+    This function applies a notch filter to the raw signal. It takes the raw signal and the sampling frequency in Hz.
+    Harmonics of the sampling frequency is filtered from the signal. It returns the resulting filtered signal.
+    """
+    
+    # define notch filter parameters
+    f0 = fs / 8  # fundamental frequency to filter out (in Hz)
+    harmonics = [f0 * i for i in range (1, 5)]  # harmonics to filter out (in Hz)
+
+    # add some additional harmonics that are not exact multiples of the fundamental frequency
+    harmonics.append(984.96e6)
+    harmonics.append(1.47744e9)
+    harmonics.append(1.96992e9)
+
+    Q = 30.0  # quality factor for the notch filter, adjust for narrower or wider notches
+
+    # Create notch filters for each harmonic
+    notch_filters = []
+    for f_h in harmonics:
+        w0 = f_h / (fs / 2)  # Normalized frequency (0 to 1)
+        b, a = iirnotch(w0, Q)
+        notch_filters.append((b, a))
+    
+    # apply each notch filter in sequence (zero-phase)
+    filtered_signal = raw_signal.copy()
+    for b, a in notch_filters:
+        filtered_signal = filtfilt(b, a, filtered_signal)
+    
+    return filtered_signal
 
 def main():
     
@@ -99,6 +132,9 @@ def main():
 
     data_rows = readout[:-1]
     avg_data = np.mean(data_rows, axis = 0) # get the average over all experiments to increase SNR
+    # # apply the notch filter to the averaged data
+    # fs = 4423.68e6  # ADC sampling frequency in Hz
+    # avg_data = ApplyNotchFilter(avg_data, fs)
     time_row = readout[-1] * 1e3 # the board sends the data in us, we turn it to ns
     
     result = np.vstack([data_rows, avg_data, time_row])
