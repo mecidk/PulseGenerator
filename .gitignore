@@ -1,2 +1,5 @@
 *.txt
 *.png
+.venv
+.vscode
+.DS_Store

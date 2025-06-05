@@ -2,7 +2,7 @@ import requests
 from datetime import datetime
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.signal import iirnotch, filtfilt
+from scipy.signal import iirnotch, filtfilt, welch
 import time
 
 def PlotReadout(read, time, no_of_experiments):
@@ -23,6 +23,22 @@ def PlotReadout(read, time, no_of_experiments):
     plt.savefig(f"plot_{time}.png", dpi=300, bbox_inches='tight')
     plt.show()
 
+def PlotPSD(data, time, fs, no_of_experiments):
+    """
+    This function plots the Power Spectral Density (PSD) of the data using Welch's method.
+    It takes the data, the current timestamp, the sampling frequency, and the number of experiments.
+    """
+
+    fft_freqs, psd = welch(data, fs * 1e-6, return_onesided=True, detrend=False, nperseg=512)
+    plt.figure()
+    plt.semilogy(fft_freqs, psd)
+    plt.xlabel("absolute frequency (MHz)")
+    plt.ylabel("power (a.u.)")
+    plt.title(f"Power Spectral Density, Averaged over {no_of_experiments} experiments")
+    plt.tight_layout()
+    plt.savefig(f"psd_{time}.png", dpi=300, bbox_inches='tight')
+    plt.show()
+    
 def WriteToTXT(myarray, filename = "out.txt"):
     
     """
@@ -35,11 +51,11 @@ def WriteToTXT(myarray, filename = "out.txt"):
     
     np.savetxt(filename, myarray, fmt="%.8e", delimiter=",")
 
-def ApplyNotchFilter(raw_signal, fs):
+def CreateNotchFilter(raw_signal, fs):
 
     """
-    This function applies a notch filter to the raw signal. It takes the raw signal and the sampling frequency in Hz.
-    Harmonics of the sampling frequency is filtered from the signal. It returns the resulting filtered signal.
+    This function creates a notch filter to filter out the harmonics of the fundamental frequency.
+    It takes the raw signal and the sampling frequency as input, and returns the notch filter coefficients.
     """
     
     # define notch filter parameters
@@ -50,6 +66,7 @@ def ApplyNotchFilter(raw_signal, fs):
     harmonics.append(984.96e6)
     harmonics.append(1.47744e9)
     harmonics.append(1.96992e9)
+    harmonics.append(838.08e6)
 
     Q = 30.0  # quality factor for the notch filter, adjust for narrower or wider notches
 
@@ -60,9 +77,17 @@ def ApplyNotchFilter(raw_signal, fs):
         b, a = iirnotch(w0, Q)
         notch_filters.append((b, a))
     
-    # apply each notch filter in sequence (zero-phase)
+    return notch_filters
+
+def ApplyNotchFilter(raw_signal, filter_coeff):
+
+    """
+    This function applies the notch filter to the raw signal. It takes the raw signal and the filter coefficients as input,
+    and returns the filtered signal.
+    """
+
     filtered_signal = raw_signal.copy()
-    for b, a in notch_filters:
+    for b, a in filter_coeff:
         filtered_signal = filtfilt(b, a, filtered_signal)
     
     return filtered_signal
@@ -92,7 +117,7 @@ def main():
         'number_of_expt': 1         # how many experiments to be done, just a placeholder, will be set later
     }
     
-    number_of_experiments = 1000 # total number of experiments to be done
+    number_of_experiments = 100 # total number of experiments to be done
 
     all_data_rows = []
 
@@ -130,14 +155,17 @@ def main():
     readout = np.array(all_data_rows + [time_row])
     # print(readout)
 
-    data_rows = readout[:-1]
-    avg_data = np.mean(data_rows, axis = 0) # get the average over all experiments to increase SNR
-    # # apply the notch filter to the averaged data
-    # fs = 4423.68e6  # ADC sampling frequency in Hz
-    # avg_data = ApplyNotchFilter(avg_data, fs)
+    data_rows = readout[:-1] # all but the last row, which is the time row
+
+    # apply the notch filter to each row of data
+    fs = 4423.68e6 
+    notch_filters = CreateNotchFilter(data_rows[0], fs)  # create the notch filter coefficients
+    filtered_data_rows = [ApplyNotchFilter(row, notch_filters) for row in data_rows]  # apply the notch filter to each row
+
+    avg_data = np.mean(filtered_data_rows, axis = 0) # get the average over all experiments to increase SNR
     time_row = readout[-1] * 1e3 # the board sends the data in us, we turn it to ns
     
-    result = np.vstack([data_rows, avg_data, time_row])
+    result = np.vstack([filtered_data_rows, avg_data, time_row])
     
     # store the files with the timestamp
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -145,6 +173,7 @@ def main():
     WriteToTXT(result, filename)
     
     PlotReadout(result, timestamp, number_of_experiments)
+    PlotPSD(avg_data, timestamp, fs, number_of_experiments)
     
 """
 This final part is just for future use of this code. When you run this file,
