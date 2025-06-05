@@ -4,35 +4,21 @@ import numpy as np
 import matplotlib.pyplot as plt
 import time
 
-def PlotReadout(read, time, pulse_pos, pulse_width, idx = 0):
+def PlotReadout(read, time, no_of_experiments):
     
     """
     This function plots the response. It takes the response array, which is just (raw values, time) stack
-    and the current timestamp to save the figure. Additionally, it takes the positions of the endpoints of
-    all detected pulses. It doesn't return anything.
+    and the current timestamp to save the figure. It doesn't return anything.
     
     """
     
     plt.figure()
-    plt.plot(read[-1], read[idx])
+    plt.plot(read[-1], read[-2]) # take the time row and the average row to plot
     plt.xlabel("ns")
     plt.ylabel("a.u.")
-    plt.title(f"Direct Readout from the Buffer, Experiment {idx + 1}")
-    for i in pulse_pos:
-        plt.axvline(read[-1][i[0]], color='red', linestyle='--')
-        plt.axvline(read[-1][i[1]], color='green', linestyle='--')
-    
-    text = ""
-    for i in range(len(pulse_width)):
-        text += f"Pulse {i + 1}: {pulse_width[i]:.2f} ns"
-        if i == len(pulse_width) - 1:
-            continue
-        text += "\n"
-        
-    plt.plot([], [], label=text)
-    
+    plt.title(f"Direct Readout from the Buffer, Averaged over {no_of_experiments} experiments")
+
     plt.tight_layout()
-    plt.legend()
     plt.savefig(f"plot_{time}.png", dpi=300, bbox_inches='tight')
     plt.show()
 
@@ -62,85 +48,67 @@ def main():
     
     # specify the parameters of the pulses in this payload to be sent over the internet to the board
     payload = {
-        'freq': 100,                # underlying frequency, same for both DACs.
-        'width': 10,                # this parameter is weird due to QICK problems
+        'freq': 120,                # underlying frequency, same for both DACs.
+        'width': 15,                # this parameter is weird due to QICK problems
                                     # width = 100 -> real pulse width = 393.43ns
                                     # width = 50 -> real pulse width = 199.93ns
                                     # width = 10 -> real pulse width = 49.83ns
         'pulse_count': 1,           # number of pulses to be generated back to back in one experiment
         'trigger_delay': 1,         # delay amount of the triggering of the ADC buffer, essentially when to "press record", in us
                                     # trigger_delay = 1 -> first pulse around t = 50ns
-        'number_of_expt': 1 # how many experiments to be done
+        'number_of_expt': 1         # how many experiments to be done, just a placeholder, will be set later
     }
     
-    # send the actual request (HTTP request) to the board. don't forget to add the password. get the response from the board 
-    response = requests.post(url, json = payload, headers = {"auth": "magnetism@ESB165"})
-    
-    # if the response is not OK, raise an error
-    if response.status_code != 200:
-        print(f"Request failed with status code {response.status_code}")
-        print("Response body:", response.text)
-        raise RuntimeError("Failed request")
+    number_of_experiments = 1000 # total number of experiments to be done
+
+    all_data_rows = []
+
+    for i in range(0, number_of_experiments, 1000):
+        batch_size = min(1000, number_of_experiments - i) # number of experiments in this batch
+        new_payload = payload.copy() # copy the original payload
+        new_payload['number_of_expt'] = batch_size # set the number of experiments in this batch
+
+        print(f"Sending batch of {batch_size} experiments...")
+        # send the actual request (HTTP request) to the board. don't forget to add the password. get the response from the board 
+        response = requests.post(url, json=new_payload, headers={"auth": "magnetism@ESB165"})
+
+        # if the response is not OK, raise an error
+        if response.status_code != 200:
+            print(f"Request for batch {i} failed with status code {response.status_code}")
+            print("Response body:", response.text)
+            raise RuntimeError("Failed request")
         
+        response = response.json()['array']  # convert the response to JSON format
+        print(f"Batch {i // 1000 + 1} completed successfully.")
+        
+        data_part = response[:-1]  # all but the last row, which is the time row
+        all_data_rows.extend(data_part)  # extend the responses list with the data part
+
+        if i == 0:
+            time_row = response[-1]  # the last row is the time row, we take it only once
+
+        time.sleep(1)  # wait for a bit to avoid overwhelming the server
+
     """
     This is the main response from the board, an array consisting of 
-    [[raw data], [timestamps]]. First part is the direct *raw* read of the 
-    first ADC, channel 0. Second part is the corresponding timestamp of each sample.
+    [[raw data 1], [raw data 2], ..., [timestamps]]. First part is the direct *raw* reads of the 
+    first ADC, channel 0. Last part is the corresponding timestamp of each sample.
     """
-    readout = np.array(response.json()['array'])
-    print(readout)
+    readout = np.array(all_data_rows + [time_row])
+    # print(readout)
+
+    data_rows = readout[:-1]
+    avg_data = np.mean(data_rows, axis = 0) # get the average over all experiments to increase SNR
+    time_row = readout[-1] * 1e3 # the board sends the data in us, we turn it to ns
     
-    readout[-1] = readout[-1] * 1e3 # the board sends the data in us, we turn it to ns
+    result = np.vstack([data_rows, avg_data, time_row])
     
     # store the files with the timestamp
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename =  f"readout_{timestamp}.txt"
-    WriteToTXT(readout, filename)
+    WriteToTXT(result, filename)
     
-    # loop over every experiment/run
-    for i in range(payload['number_of_expt']):
-        """
-        This part detects the pulses present in the data array.
-        """
-        abs_signal = np.abs(readout[i]) # take the absolute value of the data to make detection easier
-    
-        # apply a moving-average filter to get the envelope. window length is 20
-        kernel = np.ones(20) / 20
-        smoothed = np.convolve(abs_signal, kernel, mode='same')
-    
-        # apply the threshold to the signal to detect the pulse
-        threshold = 0.015 * np.max(smoothed)
-        print(f"experiment {i}, threshold {threshold}")
-        above = smoothed > threshold
-    
-        # detect rising and falling edges
-        edges = np.diff(above.astype(int))
-        starts = np.where(edges == 1)[0] + 1
-        ends = np.where(edges == -1)[0] + 1 
-    
-        # find the pulse and get the pulse width
-        if len(starts) > 0 and len(ends) > 0:
-            
-            pulse_widths = []
-            pulse_positions = []
-    
-            for s in starts:
-                for e in ends:
-                    if e > s:
-                        endpoint_pair = [s, e] # CAREFUL, this pair is holding the sample number, NOT the timestamp
-                        pulse_positions.append(endpoint_pair)
-                        width = (readout[-1][e] - readout[-1][s])
-                        pulse_widths.append(width)
-                        break
-            
-            for i in range(len(pulse_widths)):
-                print(f"Pulse detected: starts at {readout[-1][pulse_positions[i][0]]} ns, ends at {readout[-1][pulse_positions[i][1]]} ns, has the width {pulse_widths[i]} ns")
-       
-        else:
-            print("No pulse detected")
-            
-        # plot the incoming data, iterator i is sent to get the correct experiment
-        PlotReadout(readout, timestamp, pulse_positions, pulse_widths, i)
+    PlotReadout(result, timestamp, number_of_experiments)
     
 """
 This final part is just for future use of this code. When you run this file,
