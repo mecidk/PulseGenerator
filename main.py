@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from scipy.signal import iirnotch, filtfilt, welch
 import time
 
-def PlotReadout(read, time, no_of_experiments):
+def PlotReadout(read, time_row, timestamp, no_of_experiments, batch_number):
     
     """
     This function plots the response. It takes the response array, which is just (raw values, time) stack
@@ -14,16 +14,21 @@ def PlotReadout(read, time, no_of_experiments):
     """
     
     plt.figure()
-    plt.plot(read[-1], read[-2]) # take the time row and the average row to plot
+    plt.plot(time_row, read) # take the time row and the average row to plot
     plt.xlabel("ns")
     plt.ylabel("a.u.")
-    plt.title(f"Direct Readout from the Buffer, Averaged over {no_of_experiments} experiments")
+
+    if batch_number == 9999:
+        plt.title(f"Readout, Averaged over {no_of_experiments} experiments, Total Averatge")
+    else:
+        plt.title(f"Readout, Averaged over {no_of_experiments} experiments, Batch {batch_number}")
 
     plt.tight_layout()
-    plt.savefig(f"plot_{time}.png", dpi=300, bbox_inches='tight')
+    plt.savefig(f"plot_{timestamp}.png", dpi=300, bbox_inches='tight')
     plt.show()
 
-def PlotPSD(data, time, fs, no_of_experiments):
+def PlotPSD(data, time, fs, no_of_experiments, batch_number):
+
     """
     This function plots the Power Spectral Density (PSD) of the data using Welch's method.
     It takes the data, the current timestamp, the sampling frequency, and the number of experiments.
@@ -34,7 +39,12 @@ def PlotPSD(data, time, fs, no_of_experiments):
     plt.semilogy(fft_freqs, psd)
     plt.xlabel("absolute frequency (MHz)")
     plt.ylabel("power (a.u.)")
-    plt.title(f"Power Spectral Density, Averaged over {no_of_experiments} experiments")
+
+    if batch_number == 9999:
+        plt.title(f"PSD, Averaged over {no_of_experiments} experiments, Total Average")
+    else:
+        plt.title(f"PSD, Averaged over {no_of_experiments} experiments, Batch {batch_number}")
+
     plt.tight_layout()
     plt.savefig(f"psd_{time}.png", dpi=300, bbox_inches='tight')
     plt.show()
@@ -51,7 +61,7 @@ def WriteToTXT(myarray, filename = "out.txt"):
     
     np.savetxt(filename, myarray, fmt="%.8e", delimiter=",")
 
-def CreateNotchFilter(raw_signal, fs):
+def CreateNotchFilter(fs):
 
     """
     This function creates a notch filter to filter out the harmonics of the fundamental frequency.
@@ -118,11 +128,16 @@ def main():
     }
     
     number_of_experiments = 100 # total number of experiments to be done
+    max_batch_size = 1000  # number of experiments to be done in one batch, this is to avoid overwhelming the server
 
-    all_data_rows = []
+    # define the notch filter coefficients, this is only done once since the filter coefficients are the same for all experiments
+    fs = 4423.68e6 
+    notch_filters = CreateNotchFilter(fs)  # create the notch filter coefficients
 
-    for i in range(0, number_of_experiments, 1000):
-        batch_size = min(1000, number_of_experiments - i) # number of experiments in this batch
+    all_avg_data = []  # this will hold the average data from all batches of experiments
+
+    for i in range(0, number_of_experiments, max_batch_size):
+        batch_size = min(max_batch_size, number_of_experiments - i) # number of experiments in this batch
         new_payload = payload.copy() # copy the original payload
         new_payload['number_of_expt'] = batch_size # set the number of experiments in this batch
 
@@ -136,44 +151,37 @@ def main():
             print("Response body:", response.text)
             raise RuntimeError("Failed request")
         
-        response = response.json()['array']  # convert the response to JSON format
-        print(f"Batch {i // 1000 + 1} completed successfully.")
+        response = response.json()['array']  # convert the response to JSON format and parse it
+        print(f"Batch {i // max_batch_size + 1} acquired successfully.")
+        
+        if i == 0:
+            time_row = response[-1] * 1e3  # the last row is the time row, we take it only once, convert it to ns
         
         data_part = response[:-1]  # all but the last row, which is the time row
-        all_data_rows.extend(data_part)  # extend the responses list with the data part
 
-        if i == 0:
-            time_row = response[-1]  # the last row is the time row, we take it only once
+        filtered_data_part = ApplyNotchFilter(data_part, notch_filters)  # apply the notch filter to the data part
+        avg_data = np.mean(filtered_data_part, axis = 0)  # get the average of the batch of experiments
 
+        all_avg_data.append(avg_data)  # append the average data to the list of all average data
+        
+        # plot the readout and the PSD of the data
+        PlotReadout(filtered_data_part, time_row, timestamp, number_of_experiments, i // max_batch_size + 1)
+        PlotPSD(filtered_data_part, timestamp, fs, number_of_experiments, i // max_batch_size + 1)
+
+        print(f"Batch {i // max_batch_size + 1} processed successfully.")
         time.sleep(1)  # wait for a bit to avoid overwhelming the server
-
-    """
-    This is the main response from the board, an array consisting of 
-    [[raw data 1], [raw data 2], ..., [timestamps]]. First part is the direct *raw* reads of the 
-    first ADC, channel 0. Last part is the corresponding timestamp of each sample.
-    """
-    readout = np.array(all_data_rows + [time_row])
-    # print(readout)
-
-    data_rows = readout[:-1] # all but the last row, which is the time row
-
-    # apply the notch filter to each row of data
-    fs = 4423.68e6 
-    notch_filters = CreateNotchFilter(data_rows[0], fs)  # create the notch filter coefficients
-    filtered_data_rows = [ApplyNotchFilter(row, notch_filters) for row in data_rows]  # apply the notch filter to each row
-
-    avg_data = np.mean(filtered_data_rows, axis = 0) # get the average over all experiments to increase SNR
-    time_row = readout[-1] * 1e3 # the board sends the data in us, we turn it to ns
+ 
+    # after all the batches are done, we stack the average data and the time row
+    result = np.vstack([all_avg_data, np.mean(all_avg_data, axis = 0), time_row])
     
-    result = np.vstack([filtered_data_rows, avg_data, time_row])
-    
-    # store the files with the timestamp
+    # store the data into a .txt file with the timestamp
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename =  f"readout_{timestamp}.txt"
     WriteToTXT(result, filename)
-    
-    PlotReadout(result, timestamp, number_of_experiments)
-    PlotPSD(avg_data, timestamp, fs, number_of_experiments)
+
+    # plot the final readout and PSD of the averaged data
+    PlotReadout(result[-2], time_row, timestamp, number_of_experiments, 9999)
+    PlotPSD(result[-2], timestamp, fs, number_of_experiments, 9999)
     
 """
 This final part is just for future use of this code. When you run this file,
