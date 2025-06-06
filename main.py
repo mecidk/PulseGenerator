@@ -165,10 +165,6 @@ def main():
 
         filtered_data_part = ApplyNotchFilter(data_part, notch_filters)  # apply the notch filter to the data part
 
-        mean_array = np.mean(filtered_data_part, axis = 1, keepdims = True)  # get the mean of filtered data for each row
-
-        filtered_data_part = filtered_data_part - mean_array  # subtract the mean from the data part to remove DC offset
-
         avg_data = np.mean(filtered_data_part, axis = 0)  # get the average of the batch of experiments, i.e. colunm-wise
 
         all_avg_data.append(avg_data)  # append the average data to the list of all average data
