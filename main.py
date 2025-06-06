@@ -10,7 +10,6 @@ def PlotReadout(read, time_row, timestamp, no_of_experiments, batch_number):
     """
     This function plots the response. It takes the response array, which is just (raw values, time) stack
     and the current timestamp to save the figure. It doesn't return anything.
-    
     """
     
     plt.figure()
@@ -19,6 +18,7 @@ def PlotReadout(read, time_row, timestamp, no_of_experiments, batch_number):
     plt.ylabel("a.u.")
     plt.tight_layout()
 
+    # this is just for naming the files properly, total average or batch average
     if batch_number == 9999:
         plt.title(f"Readout, Averaged over {no_of_experiments} experiments, Total Averatge")
         plt.savefig(f"data_{timestamp}_total.png", dpi=300, bbox_inches='tight')
@@ -42,6 +42,7 @@ def PlotPSD(data, timestamp, fs, no_of_experiments, batch_number):
     plt.ylabel("power (a.u.)")
     plt.tight_layout()
 
+    # this is just for naming the files properly, total average or batch average
     if batch_number == 9999:
         plt.title(f"PSD, Averaged over {no_of_experiments} experiments, Total Average")
         plt.savefig(f"psd_{timestamp}_total.png", dpi=300, bbox_inches='tight')
@@ -126,7 +127,10 @@ def main():
         'pulse_count': 1,           # number of pulses to be generated back to back in one experiment
         'trigger_delay': 1,         # delay amount of the triggering of the ADC buffer, essentially when to "press record", in us
                                     # trigger_delay = 1 -> first pulse around t = 50ns
-        'number_of_expt': 1         # how many experiments to be done, just a placeholder, will be set later
+        'number_of_expt': 1,         # how many experiments to be done, just a placeholder, will be set later
+        'channel': 0                # which ADC channel to read, both of the DAC channels are generating the signal simultaneously
+                                    # channel 0 -> ADC_D, channel 1 -> ADC_C
+                                    # for our configuration, channel 0 is connected to the sample and channel 1 is in loopback
     }
     
     number_of_experiments = 100 # total number of experiments to be done
@@ -170,8 +174,8 @@ def main():
         all_avg_data.append(avg_data)  # append the average data to the list of all average data
         
         # plot the readout and the PSD of the data
-        PlotReadout(avg_data, time_row, timestamp, number_of_experiments, i // max_batch_size + 1)
-        PlotPSD(avg_data, timestamp, fs, number_of_experiments, i // max_batch_size + 1)
+        # PlotReadout(avg_data, time_row, timestamp, number_of_experiments, i // max_batch_size + 1)
+        # PlotPSD(avg_data, timestamp, fs, number_of_experiments, i // max_batch_size + 1)
 
         print(f"Batch {i // max_batch_size + 1} processed successfully.")
         time.sleep(1)  # wait for a bit to avoid overwhelming the server
@@ -192,7 +196,8 @@ This final part is just for future use of this code. When you run this file,
 it calls the funtion main() and does the job. But when you import this whole
 file as a module in another script, it doesn't run main() function automatically,
 you need to call the function. This is to make the integration smoother.
-"""    
+"""
+
 if __name__ == "__main__":
     startt = time.time()
     main()

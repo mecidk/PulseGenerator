@@ -5,8 +5,6 @@ import json
 
 from qick import *
 from qick_training import *
-from qick.averager_program import QickSweep
-from qick.averager_program import merge_sweeps
 from RBSupport import generate_2qgateset
 
 import numpy as np
@@ -14,8 +12,6 @@ import matplotlib.pyplot as plt
 
 soc = QickSoc()
 soccfg = soc
-
-# print(soccfg)
 
 class PulseSequence(AveragerProgram):
     def initialize_phases(self):
@@ -38,7 +34,7 @@ class PulseSequence(AveragerProgram):
                     else:
                         self.set_pulse_registers(ch=self.cfg["q2_ch"], freq=self.freq_q2,
                                                  phase=self.deg2reg(self.phase_ref_q2 + ginfo["phase"], gen_ch=self.cfg["q2_ch"]),
-                                                 gain=ginfo["gain"], waveform=g[q], phrst=0,mode="oneshot")
+                                                 gain=ginfo["gain"], waveform=g[q], phrst = 1,mode="oneshot")
                         self.pulse(ch=self.cfg["q2_ch"])
                 if q == "Q1": # Qubit 1
                     ginfo=self.cfg["gate_set"][g[q]]
@@ -52,7 +48,7 @@ class PulseSequence(AveragerProgram):
                     else:
                         self.set_pulse_registers(ch=self.cfg["q1_ch"], freq=self.freq_q1,
                                                  phase=self.deg2reg(self.phase_ref_q1 + ginfo["phase"], gen_ch=self.cfg["q1_ch"]),
-                                                 gain=ginfo["gain"], waveform=g[q], phrst=0,mode="oneshot")
+                                                 gain=ginfo["gain"], waveform=g[q], phrst = 1,mode="oneshot")
                         self.pulse(ch=self.cfg["q1_ch"])
             ################
            #modified sync_all with only DAC clocks, no ADC clocks
@@ -62,12 +58,15 @@ class PulseSequence(AveragerProgram):
         cfg = self.cfg
         self.gate_seq = cfg['gate_seq']
         self.gate_set = cfg['gate_set']
+
         # set the nyquist zone
         self.declare_gen(ch=cfg["q1_ch"], nqz=1)
         self.declare_gen(ch=cfg["q2_ch"], nqz=1)
 
-        self.declare_readout(ch=0, freq=cfg['q1_read_freq'], length=cfg['readout_length'], sel='input')
-            
+        # declare readout channels
+        self.declare_readout(ch=0, freq=cfg['q0_read_freq'], length=cfg['readout_length'], sel='input')
+        self.declare_readout(ch=1, freq=cfg['q1_read_freq'], length=cfg['readout_length'], sel='input')
+
         # convert frequency to DAC frequency (ensuring it is an available ADC frequency)
         self.freq_q1 = self.freq2reg(cfg["q1_pulse_freq"], gen_ch=cfg["q1_ch"], ro_ch=cfg["q1_ro_ch"])
         self.freq_q2 = self.freq2reg(cfg["q2_pulse_freq"], gen_ch=cfg["q2_ch"], ro_ch=cfg["q2_ro_ch"])
@@ -87,10 +86,10 @@ class PulseSequence(AveragerProgram):
 
         self.synci(500)  # give processor some time to configure pulses
         self.trigger(ddr4=True, mr=True, adc_trig_offset=self.cfg["adc_trig_offset"])
-        self.synci(500) # give the processor some time to configure pulses
+        self.synci(500) # give processor some time to configure pulses
 
     def body(self):
-        ## Trigger measurement
+        # Trigger measurement
         self.trigger(adcs=self.ro_chs,
                      pins=[0],
                      adc_trig_offset=self.cfg["adc_trig_offset"])
@@ -100,7 +99,7 @@ class PulseSequence(AveragerProgram):
         self.wait_all()
         self.sync_all(self.us2cycles(self.cfg["relax_delay"]))
 
-def GeneratePulse(freq = 1000, width = 10, pulse_count = 1, trig_delay = 1, no_of_expt = 1):
+def GeneratePulse(freq = 1000, width = 10, pulse_count = 1, trig_delay = 1, no_of_expt = 1, channel = 0):
     # transfer the input parameters to local variables
     q1_pulse_freq = freq 
     q1_read_freq = freq
@@ -120,7 +119,7 @@ def GeneratePulse(freq = 1000, width = 10, pulse_count = 1, trig_delay = 1, no_o
               "pulse_style": "arb",  # --Fixed
               "pi_sigma": soc.us2cycles(pi_sigma_width, gen_ch=0),
               "readout_length": soc.us2cycles(1, ro_ch=0),  # [Clock ticks]
-              "pi_gain": 32767,  # [DAC units]
+              "pi_gain": 30000,  # [DAC units]
               "pi_2_gain": 15000,
               "q1_pulse_freq": q1_pulse_freq,  # [MHz]
               "q2_pulse_freq": q2_pulse_freq,  # [MHz]
@@ -145,7 +144,7 @@ def GeneratePulse(freq = 1000, width = 10, pulse_count = 1, trig_delay = 1, no_o
     for _ in range(no_of_expt):
         soc.reset_gens() # clear out any DC or periodic values from the generator channels
 
-        soc.arm_mr(ch=0) # arm (get ready) the MR buffer
+        soc.arm_mr(ch = channel) # arm (get ready) the MR buffer
 
         prog.config_all(soc) # send the config to the FPGA
 
@@ -164,10 +163,11 @@ def main():
     pulse_count = data.get("pulse_count")
     trigger_delay = data.get("trigger_delay")
     number_of_expt = data.get("number_of_expt")
+    channel = data.get("channel")
     
-    readout = GeneratePulse(frequency, pulsewidth, pulse_count, trigger_delay, number_of_expt) # execute the main function
+    readout = GeneratePulse(frequency, pulsewidth, pulse_count, trigger_delay, number_of_expt, channel) # execute the main function
     
-    time_row = (soc.cycles2us(np.arange(0, len(readout[0][:, 0])), ro_ch = 0) / 8)  # create the timestamps for each sample,
+    time_row = (soc.cycles2us(np.arange(0, len(readout[0][:, 0])), ro_ch = channel) / 8)  # create the timestamps for each sample,
                                                                                     # divide by 8 is due to ADC ticks being 8
                                                                                     # times slower than the real clock cycles
             
