@@ -136,6 +136,8 @@ def main():
 
     all_avg_data = []  # this will hold the average data from all batches of experiments
 
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S") # create a timestamp for the data files and plots
+
     for i in range(0, number_of_experiments, max_batch_size):
         batch_size = min(max_batch_size, number_of_experiments - i) # number of experiments in this batch
         new_payload = payload.copy() # copy the original payload
@@ -175,8 +177,7 @@ def main():
     result = np.vstack([all_avg_data, np.mean(all_avg_data, axis = 0), time_row])
     
     # store the data into a .txt file with the timestamp
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename =  f"readout_{timestamp}.txt"
+    filename =  f"data_{timestamp}.txt"
     WriteToTXT(result, filename)
 
     # plot the final readout and PSD of the averaged data
