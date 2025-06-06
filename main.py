@@ -17,14 +17,15 @@ def PlotReadout(read, time_row, timestamp, no_of_experiments, batch_number):
     plt.plot(time_row, read) # take the time row and the average row to plot
     plt.xlabel("ns")
     plt.ylabel("a.u.")
-
+    plt.tight_layout()
+    
     if batch_number == 9999:
         plt.title(f"Readout, Averaged over {no_of_experiments} experiments, Total Averatge")
+        plt.savefig(f"data_{time}_total.png", dpi=300, bbox_inches='tight')
     else:
         plt.title(f"Readout, Averaged over {no_of_experiments} experiments, Batch {batch_number}")
+        plt.savefig(f"data_{timestamp}_batch_{batch_number}.png", dpi=300, bbox_inches='tight')
 
-    plt.tight_layout()
-    plt.savefig(f"plot_{timestamp}.png", dpi=300, bbox_inches='tight')
     plt.show()
 
 def PlotPSD(data, time, fs, no_of_experiments, batch_number):
@@ -39,14 +40,15 @@ def PlotPSD(data, time, fs, no_of_experiments, batch_number):
     plt.semilogy(fft_freqs, psd)
     plt.xlabel("absolute frequency (MHz)")
     plt.ylabel("power (a.u.)")
+    plt.tight_layout()
 
     if batch_number == 9999:
         plt.title(f"PSD, Averaged over {no_of_experiments} experiments, Total Average")
+        plt.savefig(f"psd_{time}_total.png", dpi=300, bbox_inches='tight')
     else:
         plt.title(f"PSD, Averaged over {no_of_experiments} experiments, Batch {batch_number}")
-
-    plt.tight_layout()
-    plt.savefig(f"psd_{time}.png", dpi=300, bbox_inches='tight')
+        plt.savefig(f"psd_{time}_batch_{batch_number}.png", dpi=300, bbox_inches='tight')
+    
     plt.show()
     
 def WriteToTXT(myarray, filename = "out.txt"):
@@ -153,7 +155,7 @@ def main():
             print("Response body:", response.text)
             raise RuntimeError("Failed request")
         
-        response = response.json()['array']  # convert the response to JSON format and parse it
+        response = np.array(response.json()['array'])  # convert the response to JSON format and parse it
         print(f"Batch {i // max_batch_size + 1} acquired successfully.")
         
         if i == 0:
@@ -167,8 +169,8 @@ def main():
         all_avg_data.append(avg_data)  # append the average data to the list of all average data
         
         # plot the readout and the PSD of the data
-        PlotReadout(filtered_data_part, time_row, timestamp, number_of_experiments, i // max_batch_size + 1)
-        PlotPSD(filtered_data_part, timestamp, fs, number_of_experiments, i // max_batch_size + 1)
+        PlotReadout(avg_data, time_row, timestamp, number_of_experiments, i // max_batch_size + 1)
+        PlotPSD(avg_data, timestamp, fs, number_of_experiments, i // max_batch_size + 1)
 
         print(f"Batch {i // max_batch_size + 1} processed successfully.")
         time.sleep(1)  # wait for a bit to avoid overwhelming the server
