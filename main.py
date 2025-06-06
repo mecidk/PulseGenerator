@@ -18,17 +18,17 @@ def PlotReadout(read, time_row, timestamp, no_of_experiments, batch_number):
     plt.xlabel("ns")
     plt.ylabel("a.u.")
     plt.tight_layout()
-    
+
     if batch_number == 9999:
         plt.title(f"Readout, Averaged over {no_of_experiments} experiments, Total Averatge")
-        plt.savefig(f"data_{time}_total.png", dpi=300, bbox_inches='tight')
+        plt.savefig(f"data_{timestamp}_total.png", dpi=300, bbox_inches='tight')
     else:
         plt.title(f"Readout, Averaged over {no_of_experiments} experiments, Batch {batch_number}")
         plt.savefig(f"data_{timestamp}_batch_{batch_number}.png", dpi=300, bbox_inches='tight')
 
     plt.show()
 
-def PlotPSD(data, time, fs, no_of_experiments, batch_number):
+def PlotPSD(data, timestamp, fs, no_of_experiments, batch_number):
 
     """
     This function plots the Power Spectral Density (PSD) of the data using Welch's method.
@@ -44,10 +44,10 @@ def PlotPSD(data, time, fs, no_of_experiments, batch_number):
 
     if batch_number == 9999:
         plt.title(f"PSD, Averaged over {no_of_experiments} experiments, Total Average")
-        plt.savefig(f"psd_{time}_total.png", dpi=300, bbox_inches='tight')
+        plt.savefig(f"psd_{timestamp}_total.png", dpi=300, bbox_inches='tight')
     else:
         plt.title(f"PSD, Averaged over {no_of_experiments} experiments, Batch {batch_number}")
-        plt.savefig(f"psd_{time}_batch_{batch_number}.png", dpi=300, bbox_inches='tight')
+        plt.savefig(f"psd_{timestamp}_batch_{batch_number}.png", dpi=300, bbox_inches='tight')
     
     plt.show()
     
@@ -164,7 +164,12 @@ def main():
         data_part = response[:-1]  # all but the last row, which is the time row
 
         filtered_data_part = ApplyNotchFilter(data_part, notch_filters)  # apply the notch filter to the data part
-        avg_data = np.mean(filtered_data_part, axis = 0)  # get the average of the batch of experiments
+
+        mean_array = np.mean(filtered_data_part, axis = 1, keepdims = True)  # get the mean of filtered data for each row
+
+        filtered_data_part = filtered_data_part - mean_array  # subtract the mean from the data part to remove DC offset
+
+        avg_data = np.mean(filtered_data_part, axis = 0)  # get the average of the batch of experiments, i.e. colunm-wise
 
         all_avg_data.append(avg_data)  # append the average data to the list of all average data
         
