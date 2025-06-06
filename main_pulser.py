@@ -64,8 +64,8 @@ class PulseSequence(AveragerProgram):
         self.declare_gen(ch=cfg["q2_ch"], nqz=1)
 
         # declare readout channels
-        self.declare_readout(ch=0, freq=cfg['q0_read_freq'], length=cfg['readout_length'], sel='input')
-        self.declare_readout(ch=1, freq=cfg['q1_read_freq'], length=cfg['readout_length'], sel='input')
+        self.declare_readout(ch=0, freq=cfg['q1_read_freq'], length=cfg['readout_length'], sel='input')
+        self.declare_readout(ch=1, freq=cfg['q2_read_freq'], length=cfg['readout_length'], sel='input')
 
         # convert frequency to DAC frequency (ensuring it is an available ADC frequency)
         self.freq_q1 = self.freq2reg(cfg["q1_pulse_freq"], gen_ch=cfg["q1_ch"], ro_ch=cfg["q1_ro_ch"])
