@@ -4,6 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.signal import iirnotch, filtfilt, welch
 import time
+from MagnetControl import Kepco
 
 def PlotReadout(read, time_row, timestamp, no_of_experiments, batch_number):
     
@@ -105,6 +106,14 @@ def ApplyNotchFilter(raw_signal, filter_coeff):
     
     return filtered_signal
 
+def TurnOnMagnet(instance, GPIB_channel = 1, current = 0.0):
+    instance.ramp_current(0.0, current, 0.01, 0.05)  # set the current to the desired value
+    print(f"Current ramped to {current} A on GPIB channel {GPIB_channel}")
+
+def TurnOffMagnet(instance, GPIB_channel = 1):
+    instance.set_current(0.0)  # turn off the magnet
+    print(f"Current set to 0 A on GPIB channel {GPIB_channel}")
+
 def main():
     
     """
@@ -115,6 +124,10 @@ def main():
     the pulses present, and plots the data.
     """
     
+    # create an instance of the Kepco class to control the magnet and set the current
+    kepco_instance = Kepco(GPIB_channel = 1)
+    TurnOnMagnet(kepco_instance, GPIB_channel = 1, current = -3.0)  # turn on the magnet with -3.0 A current
+
     url = 'http://128.174.248.50:5500/run' # this is the URL address that the server on the board is listening
     
     # specify the parameters of the pulses in this payload to be sent over the internet to the board
@@ -190,6 +203,8 @@ def main():
     # plot the final readout and PSD of the averaged data
     PlotReadout(result[-2], time_row, timestamp, number_of_experiments, 9999)
     PlotPSD(result[-2], timestamp, fs, number_of_experiments, 9999)
+
+    TurnOffMagnet(kepco_instance, GPIB_channel = 1)  # turn off the magnet after all experiments are done
     
 """
 This final part is just for future use of this code. When you run this file,
