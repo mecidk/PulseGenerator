@@ -75,9 +75,6 @@ class Kepco:
         It takes initial current I1 (A), final current I2 (A), step size dI (A), and delay dT (sec) as parameters.
         """
 
-        self.kepinit()
-        self.mode_current()
-        self.power_on()
         current = I1
 
         # set the direction of sweep
@@ -89,7 +86,7 @@ class Kepco:
             step = -abs(dI)
 
         while condition(current):
-            self.set_current(current)
+            self.set_current(round(current, 3))
             if current == I1:
                 time.sleep(3)
             time.sleep(dT)

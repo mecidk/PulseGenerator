@@ -21,7 +21,7 @@ def PlotReadout(read, time_row, timestamp, no_of_experiments, batch_number):
 
     # this is just for naming the files properly, total average or batch average
     if batch_number == 9999:
-        plt.title(f"Readout, Averaged over {no_of_experiments} experiments, Total Averatge")
+        plt.title(f"Readout, Averaged over {no_of_experiments} experiments, Total Average")
         plt.savefig(f"data_{timestamp}_total.png", dpi=300, bbox_inches='tight')
     else:
         plt.title(f"Readout, Averaged over {no_of_experiments} experiments, Batch {batch_number}")
@@ -107,11 +107,11 @@ def ApplyNotchFilter(raw_signal, filter_coeff):
     return filtered_signal
 
 def TurnOnMagnet(instance, GPIB_channel = 1, current = 0.0):
-    instance.ramp_current(0.0, current, 0.01, 0.05)  # set the current to the desired value
+    instance.ramp_current(float(instance.get_current()), current, 0.01, 0.05) # set the current to the desired value by ramping
     print(f"Current ramped to {current} A on GPIB channel {GPIB_channel}")
 
 def TurnOffMagnet(instance, GPIB_channel = 1):
-    instance.set_current(0.0)  # turn off the magnet
+    instance.ramp_current(float(instance.get_current()), 0.0, 0.01, 0.05) # turn off the magnet by ramping to 0 A
     print(f"Current set to 0 A on GPIB channel {GPIB_channel}")
 
 def main():
@@ -125,8 +125,12 @@ def main():
     """
     
     # create an instance of the Kepco class to control the magnet and set the current
-    kepco_instance = Kepco(GPIB_channel = 1)
+    kepco_instance = Kepco(1)
+    kepco_instance.kepinit()
+    kepco_instance.mode_current()
+    kepco_instance.power_on()
     TurnOnMagnet(kepco_instance, GPIB_channel = 1, current = -3.0)  # turn on the magnet with -3.0 A current
+    time.sleep(5)  # wait for the magnet to stabilize
 
     url = 'http://128.174.248.50:5500/run' # this is the URL address that the server on the board is listening
     
