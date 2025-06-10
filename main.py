@@ -62,10 +62,10 @@ def CalculateSNR(signal):
     dividing it by the standard deviation of the noise region.
     """
 
-    pulse_region = signal[215:315]
+    pulse_region = signal[950:1390]
     signal_amplitude = np.max(pulse_region) - np.min(pulse_region)
 
-    noise_region = signal[350:]
+    noise_region = signal[1540:]
     noise_amplitude = np.std(noise_region)
 
     snr = signal_amplitude / noise_amplitude
