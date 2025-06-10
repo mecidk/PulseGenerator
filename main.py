@@ -128,11 +128,12 @@ def ApplyNotchFilter(raw_signal, filter_coeff):
 
 def TurnOnMagnet(instance, GPIB_channel = 1, current = 0.0):
     instance.ramp_current(float(instance.get_current()), current, 0.01, 0.05) # set the current to the desired value by ramping
-    print(f"Current ramped to {current} A on GPIB channel {GPIB_channel}")
+    print(f"Current ramped up to {current} A on GPIB channel {GPIB_channel}")
+    print(f"Current Read: {instance.get_current()}")
 
 def TurnOffMagnet(instance, GPIB_channel = 1):
     instance.ramp_current(float(instance.get_current()), 0.0, 0.01, 0.05) # turn off the magnet by ramping to 0 A
-    print(f"Current set to 0 A on GPIB channel {GPIB_channel}")
+    print(f"Current ramped down to 0 A on GPIB channel {GPIB_channel}")
 
 def main():
     
