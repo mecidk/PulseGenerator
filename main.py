@@ -52,7 +52,27 @@ def PlotPSD(data, timestamp, fs, no_of_experiments, batch_number):
         plt.savefig(f"psd_{timestamp}_batch_{batch_number}.png", dpi=300, bbox_inches='tight')
     
     plt.show()
-    
+
+def CalculateSNR(signal):
+
+    """
+    This function calculates the Signal-to-Noise Ratio (SNR) of the signal.
+    It takes the signal as input and returns the SNR in both linear and dB scale.
+    The SNR is calculated by taking the maximum amplitude of the pulse region and
+    dividing it by the standard deviation of the noise region.
+    """
+
+    pulse_region = signal[215:315]
+    signal_amplitude = np.max(pulse_region) - np.min(pulse_region)
+
+    noise_region = signal[350:]
+    noise_amplitude = np.std(noise_region)
+
+    snr = signal_amplitude / noise_amplitude
+    snr_dB = 20 * np.log10(snr)
+
+    return snr, snr_dB
+
 def WriteToTXT(myarray, filename = "out.txt"):
     
     """
@@ -207,6 +227,10 @@ def main():
     # plot the final readout and PSD of the averaged data
     PlotReadout(result[-2], time_row, timestamp, number_of_experiments, 9999)
     PlotPSD(result[-2], timestamp, fs, number_of_experiments, 9999)
+
+    # calculate the SNR of the averaged data
+    snr, snr_dB = CalculateSNR(result[-2])
+    print(f"SNR (linear): {snr:.2f}, SNR (dB): {snr_dB:.2f} dB")
 
     TurnOffMagnet(kepco_instance, GPIB_channel = 1)  # turn off the magnet after all experiments are done
     
