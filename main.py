@@ -73,17 +73,29 @@ def CalculateSNR(signal):
 
     return snr, snr_dB
 
-def WriteToTXT(myarray, filename = "out.txt"):
-    
-    """
-    This function writes the readout to a .txt file. It takes the data itself and a filename.
-    The data must be a numpy array like [[values], [times]]
-    """
+def WriteToTXT(myarray, timestamp, sample, payload, number_of_experiments, magnet_current):
     
     if not isinstance(myarray, np.ndarray):
         raise TypeError("Input must be a numpy array")
     
-    np.savetxt(filename, myarray, fmt="%.8e", delimiter=",")
+    # add header to the file
+    filename = f"data/data_{timestamp}_Sample={sample}_Pulse={payload['freq']}MHz_AvgN={number_of_experiments}_MagnetI={magnet_current}.txt"
+    file = open(filename, "w")
+    file.write(f"# Date and Time: {timestamp} #\n")
+    file.write(f"# Sample: {sample} #\n")
+    file.write(f"# Pulse Frequency and Width: {payload['freq']} MHz, {payload['width']} #\n")
+    file.write(f"# LO Frequency and Power: {5.383 - (int(payload['freq']) * 1e-3)} GHz, +18 dBm #\n")
+    file.write(f"# Number of Experiments: {number_of_experiments} #\n")
+    file.write(f"# Magnet Current and Field: {magnet_current} A #\n")
+    file.write("# Data Format: Each row is a 1000-experiment average #\n")
+    file.write("# The second-to-last row is the average of all rows above, i.e. averega of all the 1000-experiment runs #\n")
+    file.write("# The last row is the time row in ns #\n")
+    file.close()
+
+    # append the data to the file
+    file = open(filename, "a")
+    np.savetxt(file, myarray, fmt = "%.18e", delimiter = ",")
+    file.close()
 
 def CreateNotchFilter(fs):
 
@@ -129,13 +141,14 @@ def ApplyNotchFilter(raw_signal, filter_coeff):
 def TurnOnMagnet(instance, GPIB_channel = 1, current = 0.0):
     instance.ramp_current(float(instance.get_current()), current, 0.01, 0.05) # set the current to the desired value by ramping
     print(f"Current ramped up to {current} A on GPIB channel {GPIB_channel}")
-    print(f"Current Read: {instance.get_current()}")
+    print(f"Current Read: {float(instance.get_current())}")
 
 def TurnOffMagnet(instance, GPIB_channel = 1):
     instance.ramp_current(float(instance.get_current()), 0.0, 0.01, 0.05) # turn off the magnet by ramping to 0 A
     print(f"Current ramped down to 0 A on GPIB channel {GPIB_channel}")
+    print(f"Current Read: {float(instance.get_current())}")
 
-def main():
+def main(timestamp, sample, pulse_frequency = 120, pulse_width = 15, magnet_current = 0.0, number_of_experiments = 1000):
     
     """
     This main function sends a request to the Flask (a type of web server)
@@ -150,28 +163,27 @@ def main():
     kepco_instance.kepinit()
     kepco_instance.mode_current()
     kepco_instance.power_on()
-    TurnOnMagnet(kepco_instance, GPIB_channel = 1, current = -3.0)  # turn on the magnet with -3.0 A current
+    TurnOnMagnet(kepco_instance, GPIB_channel = 1, current = magnet_current)  # turn on the magnet with -3.0 A current
     time.sleep(5)  # wait for the magnet to stabilize
 
     url = 'http://128.174.248.50:5500/run' # this is the URL address that the server on the board is listening
     
     # specify the parameters of the pulses in this payload to be sent over the internet to the board
     payload = {
-        'freq': 120,                # underlying frequency, same for both DACs.
-        'width': 15,                # this parameter is weird due to QICK problems
+        'freq': pulse_frequency,    # underlying frequency, same for both DACs.
+        'width': pulse_width,       # this parameter is weird due to QICK problems
                                     # width = 100 -> real pulse width = 393.43ns
                                     # width = 50 -> real pulse width = 199.93ns
                                     # width = 10 -> real pulse width = 49.83ns
         'pulse_count': 1,           # number of pulses to be generated back to back in one experiment
         'trigger_delay': 1,         # delay amount of the triggering of the ADC buffer, essentially when to "press record", in us
                                     # trigger_delay = 1 -> first pulse around t = 50ns
-        'number_of_expt': 1,         # how many experiments to be done, just a placeholder, will be set later
+        'number_of_expt': 1,        # how many experiments to be done, just a placeholder, will be set later
         'channel': 0                # which ADC channel to read, both of the DAC channels are generating the signal simultaneously
                                     # channel 0 -> ADC_D, channel 1 -> ADC_C
                                     # for our configuration, channel 0 is connected to the sample and channel 1 is in loopback
     }
     
-    number_of_experiments = 100 # total number of experiments to be done
     max_batch_size = 1000  # number of experiments to be done in one batch, this is to avoid overwhelming the server
 
     # define the notch filter coefficients, this is only done once since the filter coefficients are the same for all experiments
@@ -179,8 +191,6 @@ def main():
     notch_filters = CreateNotchFilter(fs)  # create the notch filter coefficients
 
     all_avg_data = []  # this will hold the average data from all batches of experiments
-
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S") # create a timestamp for the data files and plots
 
     for i in range(0, number_of_experiments, max_batch_size):
         batch_size = min(max_batch_size, number_of_experiments - i) # number of experiments in this batch
@@ -221,9 +231,7 @@ def main():
     # after all the batches are done, we stack the average data and the time row
     result = np.vstack([all_avg_data, np.mean(all_avg_data, axis = 0), time_row])
     
-    # store the data into a .txt file with the timestamp
-    filename =  f"data_{timestamp}.txt"
-    WriteToTXT(result, filename)
+    WriteToTXT(result, timestamp, sample, payload, number_of_experiments, magnet_current)
 
     # plot the final readout and PSD of the averaged data
     PlotReadout(result[-2], time_row, timestamp, number_of_experiments, 9999)
@@ -244,6 +252,15 @@ you need to call the function. This is to make the integration smoother.
 
 if __name__ == "__main__":
     startt = time.time()
-    main()
+
+    main(
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S"),
+        sample = "2024-Feb-Argn-YIG-2_5b-b1",
+        pulse_frequency = 120,
+        pulse_width = 15,
+        magnet_current = -3.0, 
+        number_of_experiments = 1000
+    )
+
     endd = time.time()
     print(f"took {endd - startt} seconds")
