@@ -27,7 +27,8 @@ def PlotReadout(read, time_row, filename, no_of_experiments, batch_number):
         plt.title(f"Readout, Averaged over {no_of_experiments} experiments, Batch {batch_number}")
         plt.savefig("data/plot_" + filename + f"_Batch_{batch_number}.png", dpi=300, bbox_inches='tight')
 
-    plt.show()
+    # plt.show()
+    plt.close()
 
 def PlotPSD(data, filename, fs, no_of_experiments, batch_number):
 
@@ -51,7 +52,8 @@ def PlotPSD(data, filename, fs, no_of_experiments, batch_number):
         plt.title(f"PSD, Averaged over {no_of_experiments} experiments, Batch {batch_number}")
         plt.savefig("data/PSD_" + filename + f"_Batch_{batch_number}.png", dpi=300, bbox_inches='tight')
     
-    plt.show()
+    # plt.show()
+    plt.close()
 
 def CalculateSNR(signal):
 
@@ -137,17 +139,43 @@ def ApplyNotchFilter(raw_signal, filter_coeff):
     
     return filtered_signal
 
-def TurnOnMagnet(instance, GPIB_channel = 1, current = 0.0):
+def InitializeMagnet(GPIB_channel = 1):
+
+    """
+    This function initializes the magnet by creating an instance of the Kepco class.
+    It sets the mode to current and powers on the magnet.
+    """
+    
+    kepco_instance = Kepco(GPIB_channel)
+    kepco_instance.kepinit()  # initialize the Kepco instance
+    kepco_instance.mode_current()  # set the mode to current
+    kepco_instance.power_on()  # power on the magnet
+
+    return kepco_instance
+
+def TurnOnMagnet(instance, current = 0.0):
+
+    """
+    This function turns on the magnet by ramping the current to the desired value.
+    It takes the instance of the Kepco class and the desired current as input.
+    """
+
     instance.ramp_current(float(instance.get_current()), current, 0.01, 0.05) # set the current to the desired value by ramping
-    print(f"Current ramped up to {current} A on GPIB channel {GPIB_channel}")
+    print(f"Current ramped up to {current} A.")
     print(f"Current Read: {float(instance.get_current())}")
 
-def TurnOffMagnet(instance, GPIB_channel = 1):
+def TurnOffMagnet(instance):
+
+    """
+    This function turns off the magnet by ramping the current down to 0 A.
+    It takes the instance of the Kepco class as input.
+    """
+
     instance.ramp_current(float(instance.get_current()), 0.0, 0.01, 0.05) # turn off the magnet by ramping to 0 A
-    print(f"Current ramped down to 0 A on GPIB channel {GPIB_channel}")
+    print(f"Current ramped down to 0 A.")
     print(f"Current Read: {float(instance.get_current())}")
 
-def main(timestamp, sample, pulse_frequency = 120, pulse_width = 15, magnet_current = 0.0, LO_frequency = 5.0, number_of_experiments = 1000):
+def main(timestamp, sample, pulse_frequency = 120, pulse_width = 15, magnet_inst = None, magnet_current = 0.0, LO_frequency = 5.0, number_of_experiments = 1000):
     
     """
     This main function sends a request to the Flask (a type of web server)
@@ -156,13 +184,8 @@ def main(timestamp, sample, pulse_frequency = 120, pulse_width = 15, magnet_curr
     from the board. This function then exports the data to a .txt file, detects
     the pulses present, and plots the data.
     """
-    
-    # create an instance of the Kepco class to control the magnet and set the current
-    kepco_instance = Kepco(1)
-    kepco_instance.kepinit()
-    kepco_instance.mode_current()
-    kepco_instance.power_on()
-    TurnOnMagnet(kepco_instance, GPIB_channel = 1, current = magnet_current)  # turn on the magnet with -3.0 A current
+
+    TurnOnMagnet(magnet_inst, current = magnet_current)  # turn on the magnet with -3.0 A current
     time.sleep(5)  # wait for the magnet to stabilize
 
     url = 'http://128.174.248.50:5500/run' # this is the URL address that the server on the board is listening
@@ -244,7 +267,7 @@ def main(timestamp, sample, pulse_frequency = 120, pulse_width = 15, magnet_curr
     snr, snr_dB = CalculateSNR(result[-2])
     print(f"SNR (linear): {snr:.2f}, SNR (dB): {snr_dB:.2f} dB")
 
-    TurnOffMagnet(kepco_instance, GPIB_channel = 1)  # turn off the magnet after all experiments are done
+    TurnOffMagnet(magnet_inst)  # turn off the magnet after all experiments are done
     
 """
 This final part is just for future use of this code. When you run this file,
@@ -256,11 +279,16 @@ you need to call the function. This is to make the integration smoother.
 if __name__ == "__main__":
     startt = time.time()
 
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S") # get the current timestamp in the format YYYYMMDD_HHMMSS
+
+    magnet_instance = InitializeMagnet(GPIB_channel = 1)  # initialize the magnet
+
     main(
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S"),
+        timestamp = timestamp,
         sample = "2024-Feb-Argn-YIG-2_5b-b1",
         pulse_frequency = 120,
         pulse_width = 15,
+        magnet_inst = magnet_instance,
         magnet_current = -3.0,
         LO_frequency = 5.263,
         number_of_experiments = 1000
