@@ -22,10 +22,10 @@ def PlotReadout(read, time_row, filename, no_of_experiments, batch_number):
     # this is just for naming the files properly, total average or batch average
     if batch_number == 9999:
         plt.title(f"Readout, Averaged over {no_of_experiments} experiments, Grand Average")
-        plt.savefig(filename + "_Plot.png", dpi=300, bbox_inches='tight')
+        plt.savefig("data/plot_" + filename + ".png", dpi=300, bbox_inches='tight')
     else:
         plt.title(f"Readout, Averaged over {no_of_experiments} experiments, Batch {batch_number}")
-        plt.savefig(filename + f"_Plot_Batch_{batch_number}.png", dpi=300, bbox_inches='tight')
+        plt.savefig("data/plot_" + filename + f"_Batch_{batch_number}.png", dpi=300, bbox_inches='tight')
 
     plt.show()
 
@@ -46,10 +46,10 @@ def PlotPSD(data, filename, fs, no_of_experiments, batch_number):
     # this is just for naming the files properly, total average or batch average
     if batch_number == 9999:
         plt.title(f"PSD, Averaged over {no_of_experiments} experiments, Grand Average")
-        plt.savefig(filename + "_PSD.png", dpi=300, bbox_inches='tight')
+        plt.savefig("data/PSD_" + filename + ".png", dpi=300, bbox_inches='tight')
     else:
         plt.title(f"PSD, Averaged over {no_of_experiments} experiments, Batch {batch_number}")
-        plt.savefig(filename + f"_PSD_Batch_{batch_number}.png", dpi=300, bbox_inches='tight')
+        plt.savefig("data/PSD_" + filename + f"_Batch_{batch_number}.png", dpi=300, bbox_inches='tight')
     
     plt.show()
 
@@ -79,7 +79,7 @@ def WriteToTXT(myarray, filename, timestamp, sample, payload, number_of_experime
         raise TypeError("Input must be a numpy array")
     
     # add header to the file
-    file = open(filename, "w")
+    file = open("data/data_" + filename + ".txt", "w")
     file.write(f"# Date and Time: {timestamp} #\n")
     file.write(f"# Sample: {sample} #\n")
     file.write(f"# Pulse Frequency and Width: {payload['freq']} MHz, {payload['width'] * 4} ns #\n")
@@ -92,7 +92,7 @@ def WriteToTXT(myarray, filename, timestamp, sample, payload, number_of_experime
     file.close()
 
     # append the data to the file
-    file = open(filename, "a")
+    file = open("data/data_" + filename + ".txt", "a")
     np.savetxt(file, myarray, fmt = "%.18e", delimiter = ",")
     file.close()
 
@@ -231,7 +231,7 @@ def main(timestamp, sample, pulse_frequency = 120, pulse_width = 15, magnet_curr
     result = np.vstack([all_avg_data, np.mean(all_avg_data, axis = 0), time_row])
 
     # define a filename to be used
-    filename = f"data/data_{timestamp}_Sample={sample}_Pulse={payload['freq']}MHz_AvgN={number_of_experiments}_MagnetI={magnet_current}.txt"
+    filename = f"{timestamp}_Sample={sample}_Pulse={payload['freq']}MHz_AvgN={number_of_experiments}_MagnetI={magnet_current}_A"
 
     # export the data to a .txt file
     WriteToTXT(result, filename, timestamp, sample, payload, number_of_experiments, magnet_current, LO_frequency)
