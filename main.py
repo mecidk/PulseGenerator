@@ -75,7 +75,7 @@ def CalculateSNR(signal):
 
     return snr, snr_dB
 
-def WriteToTXT(myarray, filename, timestamp, sample, payload, number_of_experiments, magnet_current, LO_frequency):
+def WriteToTXT(myarray, filename, timestamp, sample, payload, number_of_experiments, magnet_current, LO_frequency, note):
     
     if not isinstance(myarray, np.ndarray):
         raise TypeError("Input must be a numpy array")
@@ -88,6 +88,7 @@ def WriteToTXT(myarray, filename, timestamp, sample, payload, number_of_experime
     file.write(f"# LO Frequency and Power: {LO_frequency} GHz, +18 dBm #\n")
     file.write(f"# Number of Experiments: {number_of_experiments} #\n")
     file.write(f"# Magnet Current: {magnet_current} A #\n")
+    file.write(f"# Note: {note} #\n")
     file.write("# Data Format: Each row is a 1000-experiment average #\n")
     file.write("# The second-to-last row is the average of all rows above, i.e. average of all the 1000-experiment runs #\n")
     file.write("# The last row is the time row in ns #\n")
@@ -153,29 +154,18 @@ def InitializeMagnet(GPIB_channel = 1):
 
     return kepco_instance
 
-def TurnOnMagnet(instance, current = 0.0):
+def RampMagnetCurrent(instance, current = 0.0):
 
     """
-    This function turns on the magnet by ramping the current to the desired value.
+    This function ramps the magnet current to the desired value.
     It takes the instance of the Kepco class and the desired current as input.
     """
 
     instance.ramp_current(float(instance.get_current()), current, 0.01, 0.05) # set the current to the desired value by ramping
-    print(f"Current ramped up to {current} A.")
+    print(f"Current ramped to {current} A.")
     print(f"Current Read: {float(instance.get_current())}")
 
-def TurnOffMagnet(instance):
-
-    """
-    This function turns off the magnet by ramping the current down to 0 A.
-    It takes the instance of the Kepco class as input.
-    """
-
-    instance.ramp_current(float(instance.get_current()), 0.0, 0.01, 0.05) # turn off the magnet by ramping to 0 A
-    print(f"Current ramped down to 0 A.")
-    print(f"Current Read: {float(instance.get_current())}")
-
-def main(timestamp, sample, pulse_frequency = 120, pulse_width = 15, magnet_inst = None, magnet_current = 0.0, LO_frequency = 5.0, number_of_experiments = 1000):
+def main(timestamp, sample, pulse_frequency = 120, pulse_width = 15, magnet_inst = None, magnet_current = 0.0, LO_frequency = 5.0, note = "", number_of_experiments = 1000):
     
     """
     This main function sends a request to the Flask (a type of web server)
@@ -185,7 +175,8 @@ def main(timestamp, sample, pulse_frequency = 120, pulse_width = 15, magnet_inst
     the pulses present, and plots the data.
     """
 
-    TurnOnMagnet(magnet_inst, current = magnet_current)  # turn on the magnet with -3.0 A current
+    RampMagnetCurrent(magnet_inst, magnet_current)  # turn on the magnet with -3.0 A current
+    
     time.sleep(5)  # wait for the magnet to stabilize
 
     url = 'http://128.174.248.50:5500/run' # this is the URL address that the server on the board is listening
@@ -257,7 +248,7 @@ def main(timestamp, sample, pulse_frequency = 120, pulse_width = 15, magnet_inst
     filename = f"{timestamp}_Sample={sample}_Pulse={payload['freq']}MHz_AvgN={number_of_experiments}_MagnetI={magnet_current}_A"
 
     # export the data to a .txt file
-    WriteToTXT(result, filename, timestamp, sample, payload, number_of_experiments, magnet_current, LO_frequency)
+    WriteToTXT(result, filename, timestamp, sample, payload, number_of_experiments, magnet_current, LO_frequency, note)
 
     # plot the final readout and PSD of the averaged data
     PlotReadout(result[-2], time_row, filename, number_of_experiments, 9999)
@@ -267,7 +258,7 @@ def main(timestamp, sample, pulse_frequency = 120, pulse_width = 15, magnet_inst
     snr, snr_dB = CalculateSNR(result[-2])
     print(f"SNR (linear): {snr:.2f}, SNR (dB): {snr_dB:.2f} dB")
 
-    TurnOffMagnet(magnet_inst)  # turn off the magnet after all experiments are done
+    RampMagnetCurrent(magnet_inst, 0.0)  # turn off the magnet after all experiments are done
     
 """
 This final part is just for future use of this code. When you run this file,
@@ -291,8 +282,11 @@ if __name__ == "__main__":
         magnet_inst = magnet_instance,
         magnet_current = -3.0,
         LO_frequency = 5.263,
+        note = "4.8GHz LPF at rf amp & 1GHz LPF at ADC of rfsoc",
         number_of_experiments = 1000
     )
+
+    RampMagnetCurrent(magnet_instance, 0.0)  # double check that the magnet is turned off
 
     endd = time.time()
     print(f"took {endd - startt} seconds")
