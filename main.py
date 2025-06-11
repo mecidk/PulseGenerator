@@ -6,7 +6,7 @@ from scipy.signal import iirnotch, filtfilt, welch
 import time
 from MagnetControl import Kepco
 
-def PlotReadout(read, time_row, timestamp, no_of_experiments, batch_number):
+def PlotReadout(read, time_row, filename, no_of_experiments, batch_number):
     
     """
     This function plots the response. It takes the response array, which is just (raw values, time) stack
@@ -21,15 +21,15 @@ def PlotReadout(read, time_row, timestamp, no_of_experiments, batch_number):
 
     # this is just for naming the files properly, total average or batch average
     if batch_number == 9999:
-        plt.title(f"Readout, Averaged over {no_of_experiments} experiments, Total Average")
-        plt.savefig(f"data_{timestamp}_total.png", dpi=300, bbox_inches='tight')
+        plt.title(f"Readout, Averaged over {no_of_experiments} experiments, Grand Average")
+        plt.savefig(filename + "_Plot.png", dpi=300, bbox_inches='tight')
     else:
         plt.title(f"Readout, Averaged over {no_of_experiments} experiments, Batch {batch_number}")
-        plt.savefig(f"data_{timestamp}_batch_{batch_number}.png", dpi=300, bbox_inches='tight')
+        plt.savefig(filename + f"_Plot_Batch_{batch_number}.png", dpi=300, bbox_inches='tight')
 
     plt.show()
 
-def PlotPSD(data, timestamp, fs, no_of_experiments, batch_number):
+def PlotPSD(data, filename, fs, no_of_experiments, batch_number):
 
     """
     This function plots the Power Spectral Density (PSD) of the data using Welch's method.
@@ -45,11 +45,11 @@ def PlotPSD(data, timestamp, fs, no_of_experiments, batch_number):
 
     # this is just for naming the files properly, total average or batch average
     if batch_number == 9999:
-        plt.title(f"PSD, Averaged over {no_of_experiments} experiments, Total Average")
-        plt.savefig(f"psd_{timestamp}_total.png", dpi=300, bbox_inches='tight')
+        plt.title(f"PSD, Averaged over {no_of_experiments} experiments, Grand Average")
+        plt.savefig(filename + "_PSD.png", dpi=300, bbox_inches='tight')
     else:
         plt.title(f"PSD, Averaged over {no_of_experiments} experiments, Batch {batch_number}")
-        plt.savefig(f"psd_{timestamp}_batch_{batch_number}.png", dpi=300, bbox_inches='tight')
+        plt.savefig(filename + f"_PSD_Batch_{batch_number}.png", dpi=300, bbox_inches='tight')
     
     plt.show()
 
@@ -73,22 +73,21 @@ def CalculateSNR(signal):
 
     return snr, snr_dB
 
-def WriteToTXT(myarray, timestamp, sample, payload, number_of_experiments, magnet_current):
+def WriteToTXT(myarray, filename, timestamp, sample, payload, number_of_experiments, magnet_current, LO_frequency):
     
     if not isinstance(myarray, np.ndarray):
         raise TypeError("Input must be a numpy array")
     
     # add header to the file
-    filename = f"data/data_{timestamp}_Sample={sample}_Pulse={payload['freq']}MHz_AvgN={number_of_experiments}_MagnetI={magnet_current}.txt"
     file = open(filename, "w")
     file.write(f"# Date and Time: {timestamp} #\n")
     file.write(f"# Sample: {sample} #\n")
-    file.write(f"# Pulse Frequency and Width: {payload['freq']} MHz, {payload['width']} #\n")
-    file.write(f"# LO Frequency and Power: {5.383 - (int(payload['freq']) * 1e-3)} GHz, +18 dBm #\n")
+    file.write(f"# Pulse Frequency and Width: {payload['freq']} MHz, {payload['width'] * 4} ns #\n")
+    file.write(f"# LO Frequency and Power: {LO_frequency} GHz, +18 dBm #\n")
     file.write(f"# Number of Experiments: {number_of_experiments} #\n")
-    file.write(f"# Magnet Current and Field: {magnet_current} A #\n")
+    file.write(f"# Magnet Current: {magnet_current} A #\n")
     file.write("# Data Format: Each row is a 1000-experiment average #\n")
-    file.write("# The second-to-last row is the average of all rows above, i.e. averega of all the 1000-experiment runs #\n")
+    file.write("# The second-to-last row is the average of all rows above, i.e. average of all the 1000-experiment runs #\n")
     file.write("# The last row is the time row in ns #\n")
     file.close()
 
@@ -148,7 +147,7 @@ def TurnOffMagnet(instance, GPIB_channel = 1):
     print(f"Current ramped down to 0 A on GPIB channel {GPIB_channel}")
     print(f"Current Read: {float(instance.get_current())}")
 
-def main(timestamp, sample, pulse_frequency = 120, pulse_width = 15, magnet_current = 0.0, number_of_experiments = 1000):
+def main(timestamp, sample, pulse_frequency = 120, pulse_width = 15, magnet_current = 0.0, LO_frequency = 5.0, number_of_experiments = 1000):
     
     """
     This main function sends a request to the Flask (a type of web server)
@@ -230,12 +229,16 @@ def main(timestamp, sample, pulse_frequency = 120, pulse_width = 15, magnet_curr
  
     # after all the batches are done, we stack the average data and the time row
     result = np.vstack([all_avg_data, np.mean(all_avg_data, axis = 0), time_row])
-    
-    WriteToTXT(result, timestamp, sample, payload, number_of_experiments, magnet_current)
+
+    # define a filename to be used
+    filename = f"data/data_{timestamp}_Sample={sample}_Pulse={payload['freq']}MHz_AvgN={number_of_experiments}_MagnetI={magnet_current}.txt"
+
+    # export the data to a .txt file
+    WriteToTXT(result, filename, timestamp, sample, payload, number_of_experiments, magnet_current, LO_frequency)
 
     # plot the final readout and PSD of the averaged data
-    PlotReadout(result[-2], time_row, timestamp, number_of_experiments, 9999)
-    PlotPSD(result[-2], timestamp, fs, number_of_experiments, 9999)
+    PlotReadout(result[-2], time_row, filename, number_of_experiments, 9999)
+    PlotPSD(result[-2], filename, fs, number_of_experiments, 9999)
 
     # calculate the SNR of the averaged data
     snr, snr_dB = CalculateSNR(result[-2])
@@ -258,7 +261,8 @@ if __name__ == "__main__":
         sample = "2024-Feb-Argn-YIG-2_5b-b1",
         pulse_frequency = 120,
         pulse_width = 15,
-        magnet_current = -3.0, 
+        magnet_current = -3.0,
+        LO_frequency = 5.263,
         number_of_experiments = 1000
     )
 
