@@ -76,7 +76,7 @@ def CalculateSNR(signal):
 
     return snr, snr_dB
 
-def WriteToTXT(myarray, filename, timestamp, sample, payload, number_of_experiments, magnet_current, LO_frequency,  LO_power, note):
+def WriteToTXT(myarray, filename, timestamp, sample, payload, number_of_experiments, max_batch_size, magnet_current, LO_frequency,  LO_power, note):
     
     """
     This function writes the data to a .txt file with a header containing metadata about the experiment.
@@ -92,10 +92,11 @@ def WriteToTXT(myarray, filename, timestamp, sample, payload, number_of_experime
     file.write(f"# Pulse Frequency and Width: {payload['freq']} MHz, {payload['width'] * 4} ns #\n")
     file.write(f"# LO Frequency and Power: {LO_frequency} GHz, {LO_power} dBm #\n")
     file.write(f"# Number of Experiments: {number_of_experiments} #\n")
+    file.write(f"# Max Batch Size: {max_batch_size} #\n")
     file.write(f"# Magnet Current: {magnet_current} A #\n")
     file.write(f"# Note: {note} #\n")
-    file.write("# Data Format: Each row is a 1000-experiment average #\n")
-    file.write("# The second-to-last row is the average of all rows above, i.e. average of all the 1000-experiment runs #\n")
+    file.write(f"# Data Format: Each row is a {max_batch_size}-experiment average #\n")
+    file.write(f"# The second-to-last row is the average of all rows above, i.e. average of all the {max_batch_size}-experiment runs #\n")
     file.write("# The last row is the time row in ns #\n")
     file.close()
 
@@ -169,7 +170,7 @@ def RampMagnetCurrent(instance, current = 0.0):
     
     print(f"Ramping current to {current} A")
     instance.ramp_current(float(instance.get_current()), current, 0.01, 0.05) # set the current to the desired value by ramping
-    print(f"Current ramped to {current} A.")
+    print(f"Current ramped to {current} A")
     curr_read = float(instance.get_current())
     print(f"Current Read: {curr_read}")
     
@@ -187,8 +188,8 @@ def InitializeLO(serial_no = "10003FAC"):
     LO_instance.set_standby(1) # turn on the standby mode
     LO_instance.set_output(False) # turn off the RF output
     LO_instance.set_rf2_standby(1) # turn on the standby mode of RF2
-    print("Local Oscillator initialized.")
-    print("Device Temperature:", LO_instance.get_temperature(), "C")
+    print("Local Oscillator initialized")
+    print(f"Device Temperature: {LO_instance.get_temperature()} degC")
 
     return LO_instance
 
@@ -328,6 +329,7 @@ def main(timestamp, sample, pulse_frequency = 120, pulse_width = 15, magnet_inst
                 raise RuntimeError("Local oscillator parameters are not set correctly. Please check the settings.")
 
         print(f"Sending batch of {batch_size} experiments...")
+
         # send the actual request (HTTP request) to the board. don't forget to add the password. get the response from the board 
         response = requests.post(url, json=new_payload, headers={"auth": "magnetism@ESB165"})
 
@@ -355,7 +357,7 @@ def main(timestamp, sample, pulse_frequency = 120, pulse_width = 15, magnet_inst
         # PlotReadout(avg_data, time_row, timestamp, number_of_experiments, i // max_batch_size + 1)
         # PlotPSD(avg_data, timestamp, fs, number_of_experiments, i // max_batch_size + 1)
 
-        print(f"Batch {i // max_batch_size + 1} processed successfully.")
+        print(f"Batch {i // max_batch_size + 1} processed successfully")
         time.sleep(1)  # wait for a bit to avoid overwhelming the server
  
     # after all the batches are done, we stack the average data and the time row
@@ -365,7 +367,7 @@ def main(timestamp, sample, pulse_frequency = 120, pulse_width = 15, magnet_inst
     filename = f"{timestamp}_Sample={sample}_Pulse={payload['freq']}MHz_AvgN={number_of_experiments}_MagnetI={magnet_current}_A"
 
     # export the data to a .txt file
-    WriteToTXT(result, filename, timestamp, sample, payload, number_of_experiments, magnet_current, LO_frequency, LO_power, note)
+    WriteToTXT(result, filename, timestamp, sample, payload, number_of_experiments, max_batch_size, magnet_current, LO_frequency, LO_power, note)
 
     # plot the final readout and PSD of the averaged data
     PlotReadout(result[-2], time_row, filename, number_of_experiments, 9999)
@@ -403,14 +405,16 @@ if __name__ == "__main__":
         magnet_current = -3.0,                                      # current to set the magnet to, in Amperes
         LO_inst = LO_instance,                                      # instance of the local oscillator control class, technical purposes
         LO_frequency = 5.263,                                       # local oscillator frequency in GHz
-        LO_power = 18.0,                                              # local oscillator power in dBm
-        number_of_experiments = 1000,                               # the total number of experiments
+        LO_power = 18.0,                                            # local oscillator power in dBm
+        number_of_experiments = 1000,                               # total number of experiments
         max_batch_size = 1000,                                      # maximum number of experiments in one batch (in one go)
         note = "4.8GHz LPF at rf amp & 1GHz LPF at ADC of rfsoc"    # notes for the experiment, labeling purposes
     )
 
     RampMagnetCurrent(magnet_instance, 0.0)  # double check that the magnet is turned off
     TurnOffLO(LO_instance)  # double check that the local oscillator is turned off
+    LO_instance.close_device()  # close the connection to the local oscillator
+    print("LO connection closed")
 
     endd = time.time()
     print(f"took {endd - startt} seconds")
