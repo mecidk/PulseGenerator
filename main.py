@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 from scipy.signal import iirnotch, filtfilt, welch
 import time
 from MagnetControl import Kepco
+from sc5511a_lib import SC5511A
 
 def PlotReadout(read, time_row, filename, no_of_experiments, batch_number):
     
@@ -75,8 +76,12 @@ def CalculateSNR(signal):
 
     return snr, snr_dB
 
-def WriteToTXT(myarray, filename, timestamp, sample, payload, number_of_experiments, magnet_current, LO_frequency, note):
+def WriteToTXT(myarray, filename, timestamp, sample, payload, number_of_experiments, magnet_current, LO_frequency,  LO_power, note):
     
+    """
+    This function writes the data to a .txt file with a header containing metadata about the experiment.
+    """
+
     if not isinstance(myarray, np.ndarray):
         raise TypeError("Input must be a numpy array")
     
@@ -85,7 +90,7 @@ def WriteToTXT(myarray, filename, timestamp, sample, payload, number_of_experime
     file.write(f"# Date and Time: {timestamp} #\n")
     file.write(f"# Sample: {sample} #\n")
     file.write(f"# Pulse Frequency and Width: {payload['freq']} MHz, {payload['width'] * 4} ns #\n")
-    file.write(f"# LO Frequency and Power: {LO_frequency} GHz, +18 dBm #\n")
+    file.write(f"# LO Frequency and Power: {LO_frequency} GHz, {LO_power} dBm #\n")
     file.write(f"# Number of Experiments: {number_of_experiments} #\n")
     file.write(f"# Magnet Current: {magnet_current} A #\n")
     file.write(f"# Note: {note} #\n")
@@ -144,7 +149,7 @@ def InitializeMagnet(GPIB_channel = 1):
 
     """
     This function initializes the magnet by creating an instance of the Kepco class.
-    It sets the mode to current and powers on the magnet.
+    It sets the mode to current and powers on the magnet. It then retuns the magnet instance.
     """
     
     kepco_instance = Kepco(GPIB_channel)
@@ -159,13 +164,91 @@ def RampMagnetCurrent(instance, current = 0.0):
     """
     This function ramps the magnet current to the desired value.
     It takes the instance of the Kepco class and the desired current as input.
+    It returns the final current read.
     """
 
     instance.ramp_current(float(instance.get_current()), current, 0.01, 0.05) # set the current to the desired value by ramping
     print(f"Current ramped to {current} A.")
-    print(f"Current Read: {float(instance.get_current())}")
+    curr_read = float(instance.get_current())
+    print(f"Current Read: {curr_read}")
+    
+    return curr_read
 
-def main(timestamp, sample, pulse_frequency = 120, pulse_width = 15, magnet_inst = None, magnet_current = 0.0, LO_frequency = 5.0, number_of_experiments = 1000, max_batch_size = 1000, note = ""):
+def InitializeLO(serial_no = "10003FAC"):
+    """
+    This function initializes the local oscillator by creating an instance of the SC5511A class.
+    It then turns off all the outputs for safety. Finally, it prints the device temperature.
+    """
+
+    LO_instance = SC5511A()
+    LO_instance.open_device(serial_no) # open the connection to the device
+    LO_instance.set_rf_mode(0) # set the RF mode to single frequency, not sweep
+    LO_instance.set_standby(0) # turn on the standby mode
+    LO_instance.set_output(False) # turn off the RF output
+    LO_instance.set_rf2_standby(0) # turn on the standby mode of RF2
+    print("Local Oscillator initialized.")
+    print("Device Temperature:", LO_instance.get_temperature(), "C")
+
+    return LO_instance
+
+def TurnOnLO(instance, freq = 5.0, power = 0.0):
+
+    """
+    This function sets the RF1 frequency and power of the local oscillator.
+    Then, it turns on the output.
+    """
+
+    if (freq <= 0.15 or freq >= 20.5):
+        raise ValueError("Frequency must be between 0.15 and 20.5 GHz")
+    instance.set_freq(int(freq * 1e9))
+    print(f"LO frequency has been set to {freq} GHz")
+
+    if (power <= -20 or power >= 20):
+        raise ValueError("Power must be between -20 and 20 dBm")
+    instance.set_level(float(power))
+    print(f"LO power has been set to {power} dBm")
+
+    instance.set_standby(1) # turn off the standby mode
+    instance.set_output(True)  # turn on the RF output
+    print("LO output is ON")
+
+
+def TurnOffLO(instance):
+    """
+    This function turns off the output of the local oscillator.
+    It sets the standby mode to 0 and turns off the RF output.
+    """
+
+    instance.set_standby(0)  # turn on the standby mode
+    instance.set_output(False)  # turn off the RF output
+    print("LO output is OFF")
+
+def GetLOStatus(instance):
+
+    """
+    This function prints and returns some useful status information about the local oscillator.
+    """
+
+    temperature = instance.get_temperature()
+    print(f"Current device temperature: {temperature} degC")
+
+    rf_params = instance.get_rf_parameters()
+    print(f"Current RF1 frequency: {rf_params.rf1_freq * 1e-9} GHz")
+    print(f"Current Power: {rf_params.rf_level:.1f} dBm")
+    print(f"RF1 output is {'ON' if rf_params.rf1_output else 'OFF'}")
+    print(f"RF1 standby mode is {'ON' if rf_params.rf1_standby else 'OFF'}")
+
+    device_status = instance.get_device_status()
+    print(f"Main PLL   \t{'locked' if device_status.pll_status.sum_pll_ld else 'unlocked'}")
+    print(f"Coarse PLL \t{'locked' if device_status.pll_status.crs_pll_ld else 'unlocked'}")
+    print(f"Fine PLL   \t{'locked' if device_status.pll_status.fine_pll_ld else 'unlocked'}")
+    print(f"Ref clk PLL\t{'locked' if device_status.pll_status.ref_100_pll_ld else 'unlocked'}")
+    print(f"RF2 PLL    \t{'locked' if device_status.pll_status.rf2_pll_ld else 'unlocked'}")
+    print(f"Crs ref PLL\t{'locked' if device_status.pll_status.crs_ref_pll_ld else 'unlocked'}")
+
+    return temperature, rf_params, device_status
+
+def main(timestamp, sample, pulse_frequency = 120, pulse_width = 15, magnet_inst = None, magnet_current = 0.0, LO_inst = None, LO_frequency = 5.0, LO_power = 0.0, number_of_experiments = 1000, max_batch_size = 1000, note = ""):
     
     """
     This main function sends a request to the Flask (a type of web server)
@@ -175,9 +258,20 @@ def main(timestamp, sample, pulse_frequency = 120, pulse_width = 15, magnet_inst
     the pulses present, and plots the data.
     """
 
-    RampMagnetCurrent(magnet_inst, magnet_current)  # turn on the magnet with -3.0 A current
-    
+    current_read = RampMagnetCurrent(magnet_inst, magnet_current)  # turn on the magnet with specified current
+    if abs(current_read - magnet_current) > 0.001:  # check if the current is set correctly
+        raise RuntimeError(f"Magnet current not set correctly.")
     time.sleep(5)  # wait for the magnet to stabilize
+
+    TurnOnLO(LO_inst, freq = LO_frequency, power = LO_power)  # turn on the local oscillator with the specified frequency and power
+    time.sleep(1)  # wait for the LO to stabilize
+    (LO_temp, LO_rf_params, LO_status) =  GetLOStatus(LO_inst)
+    if LO_temp > 50:
+        TurnOffLO(LO_inst)
+        raise RuntimeError(f"Local oscillator temperature is too high: {LO_temp} degC. Please wait for it to cool down.")
+    elif (LO_rf_params.rf1_freq != LO_frequency * 1e9 or LO_rf_params.rf_level != LO_power or not LO_rf_params.rf1_output or LO_rf_params.rf1_standby):
+        TurnOffLO(LO_inst)
+        raise RuntimeError("Local oscillator parameters are not set correctly. Please check the settings.")
 
     url = 'http://128.174.248.50:5500/run' # this is the URL address that the server on the board is listening
     
@@ -250,7 +344,7 @@ def main(timestamp, sample, pulse_frequency = 120, pulse_width = 15, magnet_inst
     filename = f"{timestamp}_Sample={sample}_Pulse={payload['freq']}MHz_AvgN={number_of_experiments}_MagnetI={magnet_current}_A"
 
     # export the data to a .txt file
-    WriteToTXT(result, filename, timestamp, sample, payload, number_of_experiments, magnet_current, LO_frequency, note)
+    WriteToTXT(result, filename, timestamp, sample, payload, number_of_experiments, magnet_current, LO_frequency, LO_power, note)
 
     # plot the final readout and PSD of the averaged data
     PlotReadout(result[-2], time_row, filename, number_of_experiments, 9999)
@@ -261,6 +355,7 @@ def main(timestamp, sample, pulse_frequency = 120, pulse_width = 15, magnet_inst
     print(f"SNR (linear): {snr:.2f}, SNR (dB): {snr_dB:.2f} dB")
 
     RampMagnetCurrent(magnet_inst, 0.0)  # turn off the magnet after all experiments are done
+    TurnOffLO(LO_inst)  # turn off the local oscillator after all experiments are done
     
 """
 This final part is just for future use of this code. When you run this file,
@@ -276,6 +371,8 @@ if __name__ == "__main__":
 
     magnet_instance = InitializeMagnet(GPIB_channel = 1)  # initialize the magnet
 
+    LO_instance = InitializeLO(serial_no = "10003FAC")
+
     main(
         timestamp = timestamp,                                      # current time, labeling purposes
         sample = "2024-Feb-Argn-YIG-2_5b-b1",                       # sample name, labeling purposes
@@ -283,13 +380,16 @@ if __name__ == "__main__":
         pulse_width = 15,                                           # pulse width in "weird" units, see the comments in the main function   
         magnet_inst = magnet_instance,                              # instance of the magnet control class, technical purposes   
         magnet_current = -3.0,                                      # current to set the magnet to, in Amperes
+        LO_inst = LO_instance,                                      # instance of the local oscillator control class, technical purposes
         LO_frequency = 5.263,                                       # local oscillator frequency in GHz
+        LO_power = 18.0,                                              # local oscillator power in dBm
         number_of_experiments = 1000,                               # the total number of experiments
         max_batch_size = 1000,                                      # maximum number of experiments in one batch (in one go)
         note = "4.8GHz LPF at rf amp & 1GHz LPF at ADC of rfsoc"    # notes for the experiment, labeling purposes
     )
 
     RampMagnetCurrent(magnet_instance, 0.0)  # double check that the magnet is turned off
+    TurnOffLO(LO_instance)  # double check that the local oscillator is turned off
 
     endd = time.time()
     print(f"took {endd - startt} seconds")
