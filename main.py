@@ -263,13 +263,24 @@ def main(timestamp, sample, pulse_frequency = 120, pulse_width = 15, magnet_inst
         raise RuntimeError(f"Magnet current not set correctly.")
     time.sleep(5)  # wait for the magnet to stabilize
 
-    TurnOnLO(LO_inst, freq = LO_frequency, power = LO_power)  # turn on the local oscillator with the specified frequency and power
-    time.sleep(1)  # wait for the LO to stabilize
+    # check the status of the device, if it is too hot, wait for it to cool down
     (LO_temp, LO_rf_params, LO_status) =  GetLOStatus(LO_inst)
     if LO_temp > 50:
         TurnOffLO(LO_inst)
-        raise RuntimeError(f"Local oscillator temperature is too high: {LO_temp} degC. Please wait for it to cool down.")
-    elif (LO_rf_params.rf1_freq != LO_frequency * 1e9 or LO_rf_params.rf_level != LO_power or not LO_rf_params.rf1_output or LO_rf_params.rf1_standby):
+        print(f"Local oscillator temperature is too high: {LO_temp} degC. Waiting for it to cool down...")
+        # wait until the temperature is below 50 degC
+        while LO_temp > 50:
+            time.sleep(5)
+            (LO_temp, LO_rf_params, LO_status) = GetLOStatus(LO_inst)
+
+    print(f"Local oscillator temperature is {LO_temp} degC. Continuing...")
+
+    TurnOnLO(LO_inst, freq = LO_frequency, power = LO_power)  # turn on the local oscillator with the specified frequency and power
+    time.sleep(1)  # wait for the LO to stabilize
+
+    # check if the LO parameters are set correctly
+    (LO_temp, LO_rf_params, LO_status) = GetLOStatus(LO_inst)
+    if (LO_rf_params.rf1_freq != LO_frequency * 1e9 or LO_rf_params.rf_level != LO_power or not LO_rf_params.rf1_output or LO_rf_params.rf1_standby):
         TurnOffLO(LO_inst)
         raise RuntimeError("Local oscillator parameters are not set correctly. Please check the settings.")
 
