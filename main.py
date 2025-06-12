@@ -183,9 +183,9 @@ def InitializeLO(serial_no = "10003FAC"):
     LO_instance = SC5511A()
     LO_instance.open_device(serial_no) # open the connection to the device
     LO_instance.set_rf_mode(0) # set the RF mode to single frequency, not sweep
-    LO_instance.set_standby(0) # turn on the standby mode
+    LO_instance.set_standby(1) # turn on the standby mode
     LO_instance.set_output(False) # turn off the RF output
-    LO_instance.set_rf2_standby(0) # turn on the standby mode of RF2
+    LO_instance.set_rf2_standby(1) # turn on the standby mode of RF2
     print("Local Oscillator initialized.")
     print("Device Temperature:", LO_instance.get_temperature(), "C")
 
@@ -208,7 +208,7 @@ def TurnOnLO(instance, freq = 5.0, power = 0.0):
     instance.set_level(float(power))
     print(f"LO power has been set to {power} dBm")
 
-    instance.set_standby(1) # turn off the standby mode
+    instance.set_standby(0) # turn off the standby mode
     instance.set_output(True)  # turn on the RF output
     print("LO output is ON")
 
@@ -219,21 +219,33 @@ def TurnOffLO(instance):
     It sets the standby mode to 0 and turns off the RF output.
     """
 
-    instance.set_standby(0)  # turn on the standby mode
+    instance.set_standby(1)  # turn on the standby mode
     instance.set_output(False)  # turn off the RF output
     print("LO output is OFF")
 
 def GetLOStatus(instance):
 
     """
-    This function returns some useful status information about the local oscillator.
+    This function prints and returns some useful status information about the local oscillator.
     """
 
     temperature = instance.get_temperature()
-
     rf_params = instance.get_rf_parameters()
-
     device_status = instance.get_device_status()
+
+    print(f"Current device temperature: {temperature} degC")
+
+    print(f"Current RF1 frequency: {rf_params.rf1_freq * 1e-9} GHz")
+    print(f"Current Power: {rf_params.rf_level:.1f} dBm")
+    print(f"RF1 output is {'ON' if device_status.operate_status.rf1_out_enable else 'OFF'}")
+    print(f"RF1 standby mode is {'ON' if device_status.operate_status.rf1_standby else 'OFF'}")
+
+    print(f"Main PLL   \t{'locked' if device_status.pll_status.sum_pll_ld else 'unlocked'}")
+    print(f"Coarse PLL \t{'locked' if device_status.pll_status.crs_pll_ld else 'unlocked'}")
+    print(f"Fine PLL   \t{'locked' if device_status.pll_status.fine_pll_ld else 'unlocked'}")
+    print(f"Ref clk PLL\t{'locked' if device_status.pll_status.ref_100_pll_ld else 'unlocked'}")
+    print(f"RF2 PLL    \t{'locked' if device_status.pll_status.rf2_pll_ld else 'unlocked'}")
+    print(f"Crs ref PLL\t{'locked' if device_status.pll_status.crs_ref_pll_ld else 'unlocked'}")
 
     return temperature, rf_params, device_status
 
@@ -249,7 +261,7 @@ def main(timestamp, sample, pulse_frequency = 120, pulse_width = 15, magnet_inst
 
     current_read = RampMagnetCurrent(magnet_inst, magnet_current)  # turn on the magnet with specified current
     if abs(current_read - magnet_current) > 0.001:  # check if the current is set correctly
-        raise RuntimeError(f"Magnet current not set correctly.")
+        raise RuntimeError("Magnet current not set correctly.")
     time.sleep(5)  # wait for the magnet to stabilize
 
     TurnOnLO(LO_inst, freq = LO_frequency, power = LO_power)  # turn on the local oscillator with the specified frequency and power
