@@ -165,7 +165,7 @@ def RampMagnetCurrent(instance, current = 0.0):
     print(f"Current ramped to {current} A.")
     print(f"Current Read: {float(instance.get_current())}")
 
-def main(timestamp, sample, pulse_frequency = 120, pulse_width = 15, magnet_inst = None, magnet_current = 0.0, LO_frequency = 5.0, note = "", number_of_experiments = 1000):
+def main(timestamp, sample, pulse_frequency = 120, pulse_width = 15, magnet_inst = None, magnet_current = 0.0, LO_frequency = 5.0, number_of_experiments = 1000, max_batch_size = 1000, note = ""):
     
     """
     This main function sends a request to the Flask (a type of web server)
@@ -197,7 +197,9 @@ def main(timestamp, sample, pulse_frequency = 120, pulse_width = 15, magnet_inst
                                     # for our configuration, channel 0 is connected to the sample and channel 1 is in loopback
     }
     
-    max_batch_size = 1000  # number of experiments to be done in one batch, this is to avoid overwhelming the server
+    # raise an error if the max_batch_size is greater than 1000 to avoid memory issues on the board
+    if max_batch_size > 1000:
+        raise ValueError("max_batch_size cannot be greater than 1000 due to memory limitations of the board")
 
     # define the notch filter coefficients, this is only done once since the filter coefficients are the same for all experiments
     fs = 4423.68e6 
@@ -275,15 +277,16 @@ if __name__ == "__main__":
     magnet_instance = InitializeMagnet(GPIB_channel = 1)  # initialize the magnet
 
     main(
-        timestamp = timestamp,
-        sample = "2024-Feb-Argn-YIG-2_5b-b1",
-        pulse_frequency = 120,
-        pulse_width = 15,
-        magnet_inst = magnet_instance,
-        magnet_current = -3.0,
-        LO_frequency = 5.263,
-        note = "4.8GHz LPF at rf amp & 1GHz LPF at ADC of rfsoc",
-        number_of_experiments = 1000
+        timestamp = timestamp,                                      # current time, labeling purposes
+        sample = "2024-Feb-Argn-YIG-2_5b-b1",                       # sample name, labeling purposes
+        pulse_frequency = 120,                                      # pulse frequency in MHz, same for both DACs
+        pulse_width = 15,                                           # pulse width in "weird" units, see the comments in the main function   
+        magnet_inst = magnet_instance,                              # instance of the magnet control class, technical purposes   
+        magnet_current = -3.0,                                      # current to set the magnet to, in Amperes
+        LO_frequency = 5.263,                                       # local oscillator frequency in GHz
+        number_of_experiments = 1000,                               # the total number of experiments
+        max_batch_size = 1000,                                      # maximum number of experiments in one batch (in one go)
+        note = "4.8GHz LPF at rf amp & 1GHz LPF at ADC of rfsoc"    # notes for the experiment, labeling purposes
     )
 
     RampMagnetCurrent(magnet_instance, 0.0)  # double check that the magnet is turned off
