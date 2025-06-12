@@ -226,25 +226,14 @@ def TurnOffLO(instance):
 def GetLOStatus(instance):
 
     """
-    This function prints and returns some useful status information about the local oscillator.
+    This function returns some useful status information about the local oscillator.
     """
 
     temperature = instance.get_temperature()
-    print(f"Current device temperature: {temperature} degC")
 
     rf_params = instance.get_rf_parameters()
-    print(f"Current RF1 frequency: {rf_params.rf1_freq * 1e-9} GHz")
-    print(f"Current Power: {rf_params.rf_level:.1f} dBm")
-    print(f"RF1 output is {'ON' if rf_params.rf1_output else 'OFF'}")
-    print(f"RF1 standby mode is {'ON' if rf_params.rf1_standby else 'OFF'}")
 
     device_status = instance.get_device_status()
-    print(f"Main PLL   \t{'locked' if device_status.pll_status.sum_pll_ld else 'unlocked'}")
-    print(f"Coarse PLL \t{'locked' if device_status.pll_status.crs_pll_ld else 'unlocked'}")
-    print(f"Fine PLL   \t{'locked' if device_status.pll_status.fine_pll_ld else 'unlocked'}")
-    print(f"Ref clk PLL\t{'locked' if device_status.pll_status.ref_100_pll_ld else 'unlocked'}")
-    print(f"RF2 PLL    \t{'locked' if device_status.pll_status.rf2_pll_ld else 'unlocked'}")
-    print(f"Crs ref PLL\t{'locked' if device_status.pll_status.crs_ref_pll_ld else 'unlocked'}")
 
     return temperature, rf_params, device_status
 
@@ -262,18 +251,6 @@ def main(timestamp, sample, pulse_frequency = 120, pulse_width = 15, magnet_inst
     if abs(current_read - magnet_current) > 0.001:  # check if the current is set correctly
         raise RuntimeError(f"Magnet current not set correctly.")
     time.sleep(5)  # wait for the magnet to stabilize
-
-    # check the status of the device, if it is too hot, wait for it to cool down
-    (LO_temp, LO_rf_params, LO_status) =  GetLOStatus(LO_inst)
-    if LO_temp > 50:
-        TurnOffLO(LO_inst)
-        print(f"Local oscillator temperature is too high: {LO_temp} degC. Waiting for it to cool down...")
-        # wait until the temperature is below 50 degC
-        while LO_temp > 50:
-            time.sleep(5)
-            (LO_temp, LO_rf_params, LO_status) = GetLOStatus(LO_inst)
-
-    print(f"Local oscillator temperature is {LO_temp} degC. Continuing...")
 
     TurnOnLO(LO_inst, freq = LO_frequency, power = LO_power)  # turn on the local oscillator with the specified frequency and power
     time.sleep(1)  # wait for the LO to stabilize
@@ -316,6 +293,26 @@ def main(timestamp, sample, pulse_frequency = 120, pulse_width = 15, magnet_inst
         batch_size = min(max_batch_size, number_of_experiments - i) # number of experiments in this batch
         new_payload = payload.copy() # copy the original payload
         new_payload['number_of_expt'] = batch_size # set the number of experiments in this batch
+
+        # check the status of the LO device, if it is too hot, wait for it to cool down
+        (LO_temp, LO_rf_params, LO_status) =  GetLOStatus(LO_inst)
+        if LO_temp > 50:
+            TurnOffLO(LO_inst)
+            print(f"Local oscillator temperature is too high: {LO_temp} degC. Waiting for it to cool down...")
+            # wait until the temperature is below 50 degC
+            while LO_temp > 50:
+                time.sleep(5)
+                (LO_temp, LO_rf_params, LO_status) = GetLOStatus(LO_inst)
+
+            # turn the LO back on after cooling down
+            TurnOnLO(LO_inst, freq = LO_frequency, power = LO_power)
+            time.sleep(1)
+
+            # check if the LO parameters are set correctly
+            (LO_temp, LO_rf_params, LO_status) = GetLOStatus(LO_inst)
+            if (LO_rf_params.rf1_freq != LO_frequency * 1e9 or LO_rf_params.rf_level != LO_power or not LO_rf_params.rf1_output or LO_rf_params.rf1_standby):
+                TurnOffLO(LO_inst)
+                raise RuntimeError("Local oscillator parameters are not set correctly. Please check the settings.")
 
         print(f"Sending batch of {batch_size} experiments...")
         # send the actual request (HTTP request) to the board. don't forget to add the password. get the response from the board 
