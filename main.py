@@ -4,7 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.signal import iirnotch, filtfilt, welch
 import time
-from MagnetControl import Kepco
+from magnet_lib import Kepco
 from sc5511a_lib import SC5511A
 
 def PlotReadout(read, time_row, filename, no_of_experiments, batch_number):
