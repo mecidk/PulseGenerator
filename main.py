@@ -166,7 +166,8 @@ def RampMagnetCurrent(instance, current = 0.0):
     It takes the instance of the Kepco class and the desired current as input.
     It returns the final current read.
     """
-
+    
+    print(f"Ramping current to {current} A")
     instance.ramp_current(float(instance.get_current()), current, 0.01, 0.05) # set the current to the desired value by ramping
     print(f"Current ramped to {current} A.")
     curr_read = float(instance.get_current())
@@ -237,8 +238,8 @@ def GetLOStatus(instance):
 
     print(f"Current RF1 frequency: {rf_params.rf1_freq * 1e-9} GHz")
     print(f"Current Power: {rf_params.rf_level:.1f} dBm")
-    print(f"RF1 output is {'ON' if device_status.operate_status.rf1_out_enable else 'OFF'}")
     print(f"RF1 standby mode is {'ON' if device_status.operate_status.rf1_standby else 'OFF'}")
+    print(f"RF1 output is {'ON' if device_status.operate_status.rf1_out_enable else 'OFF'}")
 
     print(f"Main PLL   \t{'locked' if device_status.pll_status.sum_pll_ld else 'unlocked'}")
     print(f"Coarse PLL \t{'locked' if device_status.pll_status.crs_pll_ld else 'unlocked'}")
@@ -269,7 +270,7 @@ def main(timestamp, sample, pulse_frequency = 120, pulse_width = 15, magnet_inst
 
     # check if the LO parameters are set correctly
     (LO_temp, LO_rf_params, LO_status) = GetLOStatus(LO_inst)
-    if (LO_rf_params.rf1_freq != LO_frequency * 1e9 or LO_rf_params.rf_level != LO_power or not LO_rf_params.rf1_output or LO_rf_params.rf1_standby):
+    if (LO_rf_params.rf1_freq != LO_frequency * 1e9 or LO_rf_params.rf_level != LO_power or not LO_status.operate_status.rf1_out_enable or LO_status.operate_status.rf1_standby):
         TurnOffLO(LO_inst)
         raise RuntimeError("Local oscillator parameters are not set correctly. Please check the settings.")
 
@@ -322,7 +323,7 @@ def main(timestamp, sample, pulse_frequency = 120, pulse_width = 15, magnet_inst
 
             # check if the LO parameters are set correctly
             (LO_temp, LO_rf_params, LO_status) = GetLOStatus(LO_inst)
-            if (LO_rf_params.rf1_freq != LO_frequency * 1e9 or LO_rf_params.rf_level != LO_power or not LO_rf_params.rf1_output or LO_rf_params.rf1_standby):
+            if (LO_rf_params.rf1_freq != LO_frequency * 1e9 or LO_rf_params.rf_level != LO_power or not LO_status.operate_status.rf1_out_enable or LO_status.operate_status.rf1_standby):
                 TurnOffLO(LO_inst)
                 raise RuntimeError("Local oscillator parameters are not set correctly. Please check the settings.")
 
