@@ -89,6 +89,7 @@ def WriteToTXT(myarray, filename, timestamp, sample, payload, number_of_experime
     file = open("data/data_" + filename + ".txt", "w")
     file.write(f"# Date and Time: {timestamp} #\n")
     file.write(f"# Sample: {sample} #\n")
+    file.write(f"# Pulse Type: {payload['type']} #\n")
     file.write(f"# Pulse Frequency and Width: {payload['freq']} MHz, {payload['width'] * 4} ns #\n")
     file.write(f"# LO Frequency and Power: {LO_frequency} GHz, {LO_power} dBm #\n")
     file.write(f"# Number of Experiments: {number_of_experiments} #\n")
@@ -251,7 +252,7 @@ def GetLOStatus(instance):
 
     return temperature, rf_params, device_status
 
-def main(timestamp, sample, pulse_frequency = 120, pulse_width = 15, magnet_inst = None, magnet_current = 0.0, LO_inst = None, LO_frequency = 5.0, LO_power = 0.0, number_of_experiments = 1000, max_batch_size = 1000, note = ""):
+def main(timestamp, sample, pulse_type = "gaussian", pulse_frequency = 120, pulse_width = 15, magnet_inst = None, magnet_current = 0.0, LO_inst = None, LO_frequency = 5.0, LO_power = 0.0, number_of_experiments = 1000, max_batch_size = 1000, note = ""):
     
     """
     This main function sends a request to the Flask (a type of web server)
@@ -261,6 +262,14 @@ def main(timestamp, sample, pulse_frequency = 120, pulse_width = 15, magnet_inst
     the pulses present, and plots the data.
     """
 
+    # raise an error if the max_batch_size is greater than 1000 to avoid memory issues on the board
+    if max_batch_size > 1000:
+        raise ValueError("max_batch_size cannot be greater than 1000 due to memory limitations of the board")
+    
+    # raise an error if the pulse type is not 'gaussian' or 'flat_top'
+    if pulse_type not in ["gaussian", "flat_top"]:
+        raise ValueError("Only supported pulse types are 'gaussian' and 'flat_top'")
+    
     current_read = RampMagnetCurrent(magnet_inst, magnet_current)  # turn on the magnet with specified current
     if abs(current_read - magnet_current) > 0.001:  # check if the current is set correctly
         raise RuntimeError("Magnet current not set correctly.")
@@ -279,6 +288,7 @@ def main(timestamp, sample, pulse_frequency = 120, pulse_width = 15, magnet_inst
     
     # specify the parameters of the pulses in this payload to be sent over the internet to the board
     payload = {
+        'type': pulse_type,         # type of the pulse, can be 'gaussian' or 'flat_top'
         'freq': pulse_frequency,    # underlying frequency, same for both DACs.
         'width': pulse_width,       # this parameter is weird due to QICK problems
                                     # width = 100 -> real pulse width = 393.43ns
@@ -292,10 +302,6 @@ def main(timestamp, sample, pulse_frequency = 120, pulse_width = 15, magnet_inst
                                     # channel 0 -> ADC_D, channel 1 -> ADC_C
                                     # for our configuration, channel 0 is connected to the sample and channel 1 is in loopback
     }
-    
-    # raise an error if the max_batch_size is greater than 1000 to avoid memory issues on the board
-    if max_batch_size > 1000:
-        raise ValueError("max_batch_size cannot be greater than 1000 due to memory limitations of the board")
 
     # define the notch filter coefficients, this is only done once since the filter coefficients are the same for all experiments
     fs = 4423.68e6 
@@ -399,6 +405,7 @@ if __name__ == "__main__":
     main(
         timestamp = timestamp,                                      # current time, labeling purposes
         sample = "2024-Feb-Argn-YIG-2_5b-b1",                       # sample name, labeling purposes
+        pulse_type = "gaussian",                                    # type of the pulse, can be "gaussian" or "flat_top"
         pulse_frequency = 120,                                      # pulse frequency in MHz, same for both DACs
         pulse_width = 15,                                           # pulse width in "weird" units, see the comments in the main function   
         magnet_inst = magnet_instance,                              # instance of the magnet control class, technical purposes   
