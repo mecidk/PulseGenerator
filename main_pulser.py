@@ -87,12 +87,12 @@ class PulseSequence(AveragerProgram): # type: ignore
                           )
         if cfg["pulse_style"] == "flat_top":
             # set the pulse style to flat top
-            self.set_pulse_style(ch=cfg["q1_ch"], style="flat_top")
-            self.set_pulse_style(ch=cfg["q2_ch"], style="flat_top")
+            self.default_pulse_registers(ch=cfg["q1_ch"], style="flat_top")
+            self.default_pulse_registers(ch=cfg["q2_ch"], style="flat_top")
         else:
             # set the pulse style to arbitrary, gaussian in our case
-            self.set_pulse_style(ch=cfg["q1_ch"], style="arb")
-            self.set_pulse_style(ch=cfg["q2_ch"], style="arb")
+            self.default_pulse_registers(ch=cfg["q1_ch"], style="arb")
+            self.default_pulse_registers(ch=cfg["q2_ch"], style="arb")
 
         self.synci(500)  # give processor some time to configure pulses
         self.trigger(ddr4=True, mr=True, adc_trig_offset=self.cfg["adc_trig_offset"])
