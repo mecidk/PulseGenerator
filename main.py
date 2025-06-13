@@ -267,8 +267,8 @@ def main(timestamp, sample, pulse_type = "gaussian", pulse_frequency = 120, puls
         raise ValueError("max_batch_size cannot be greater than 1000 due to memory limitations of the board")
     
     # raise an error if the pulse type is not 'gaussian' or 'flat_top'
-    if pulse_type not in ["gaussian", "flat_top"]:
-        raise ValueError("Only supported pulse types are 'gaussian' and 'flat_top'")
+    if pulse_type not in ["gaussian", "flat_top", "const"]:
+        raise ValueError("Only supported pulse types are 'gaussian', 'flat_top' and 'const'")
     
     current_read = RampMagnetCurrent(magnet_inst, magnet_current)  # turn on the magnet with specified current
     if abs(current_read - magnet_current) > 0.001:  # check if the current is set correctly
@@ -370,7 +370,7 @@ def main(timestamp, sample, pulse_type = "gaussian", pulse_frequency = 120, puls
     result = np.vstack([all_avg_data, np.mean(all_avg_data, axis = 0), time_row])
 
     # define a filename to be used
-    filename = f"{timestamp}_Sample={sample}_Pulse={payload['freq']}MHz_AvgN={number_of_experiments}_MagnetI={magnet_current}_A"
+    filename = f"{timestamp}_Sample={sample}_Pulse={pulse_type}_{payload['freq']}MHz_AvgN={number_of_experiments}_MagnetI={magnet_current}_A"
 
     # export the data to a .txt file
     WriteToTXT(result, filename, timestamp, sample, payload, number_of_experiments, max_batch_size, magnet_current, LO_frequency, LO_power, note)
@@ -405,9 +405,9 @@ if __name__ == "__main__":
     main(
         timestamp = timestamp,                                      # current time, labeling purposes
         sample = "2024-Feb-Argn-YIG-2_5b-b1",                       # sample name, labeling purposes
-        pulse_type = "gaussian",                                    # type of the pulse, can be "gaussian" or "flat_top"
+        pulse_type = "gaussian",                                    # type of the pulse, can be "gaussian", "flat_top" or "const"
         pulse_frequency = 120,                                      # pulse frequency in MHz, same for both DACs
-        pulse_width = 15,                                           # pulse width in "weird" units, see the comments in the main function   
+        pulse_width = 10,                                           # pulse width in "weird" units, see the comments in the main function   
         magnet_inst = magnet_instance,                              # instance of the magnet control class, technical purposes   
         magnet_current = -3.0,                                      # current to set the magnet to, in Amperes
         LO_inst = LO_instance,                                      # instance of the local oscillator control class, technical purposes

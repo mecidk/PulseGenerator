@@ -32,6 +32,12 @@ class PulseSequence(AveragerProgram): # type: ignore
                                                     gen_ch=self.cfg["q2_ch"]), gain=ginfo["gain"], 
                                                     waveform=g[q], phrst = 1,
                                                     length = self.cfg["length"])
+                    elif self.cfg["pulse_style"] == "const":
+                        self.set_pulse_registers(ch=self.cfg["q2_ch"], freq=self.freq_q2,
+                                                    phase=self.deg2reg(self.phase_ref_q2 + ginfo["phase"],
+                                                    gen_ch=self.cfg["q2_ch"]), gain=ginfo["gain"], 
+                                                    phrst = 1, mode="oneshot",
+                                                    length = self.cfg["length"])
                     else:
                         self.set_pulse_registers(ch=self.cfg["q2_ch"], freq=self.freq_q2,
                                                     phase=self.deg2reg(self.phase_ref_q2 + ginfo["phase"],
@@ -47,6 +53,12 @@ class PulseSequence(AveragerProgram): # type: ignore
                                                     phase=self.deg2reg(self.phase_ref_q1 + ginfo["phase"],
                                                     gen_ch=self.cfg["q1_ch"]), gain=ginfo["gain"], 
                                                     waveform=g[q], phrst = 1,
+                                                    length = self.cfg["length"])
+                    elif self.cfg["pulse_style"] == "const":
+                        self.set_pulse_registers(ch=self.cfg["q1_ch"], freq=self.freq_q1,
+                                                    phase=self.deg2reg(self.phase_ref_q1 + ginfo["phase"],
+                                                    gen_ch=self.cfg["q1_ch"]), gain=ginfo["gain"], 
+                                                    phrst = 1, mode="oneshot",
                                                     length = self.cfg["length"])
                     else:
                         self.set_pulse_registers(ch=self.cfg["q1_ch"], freq=self.freq_q1,
@@ -85,10 +97,15 @@ class PulseSequence(AveragerProgram): # type: ignore
                            idata=ginfo["idata"],
                            qdata=ginfo["qdata"],
                           )
+
         if cfg["pulse_style"] == "flat_top":
             # set the pulse style to flat top
             self.default_pulse_registers(ch=cfg["q1_ch"], style="flat_top")
             self.default_pulse_registers(ch=cfg["q2_ch"], style="flat_top")
+        elif cfg["pulse_style"] == "const":
+            # set the pulse style to constant
+            self.default_pulse_registers(ch=cfg["q1_ch"], style="const")
+            self.default_pulse_registers(ch=cfg["q2_ch"], style="const")
         else:
             # set the pulse style to arbitrary, gaussian in our case
             self.default_pulse_registers(ch=cfg["q1_ch"], style="arb")
@@ -141,10 +158,12 @@ def GeneratePulse(pulse_type = "gaussian", freq = 1000, width = 10, pulse_count 
               "expts": 1
               }
     
-    # edit the config if the pulse type is flat top
+    # edit the config if the pulse type is flat top or constant(i.e. square)
     if pulse_type == "flat_top":
         config["pulse_style"] = "flat_top"
         config["pi_sigma"] = 3  # shortest possible transition time for flat top pulse
+    elif pulse_type == "const":
+        config["pulse_style"] = "const"
       
     config["gate_set"] = generate_2qgateset(config)
     
