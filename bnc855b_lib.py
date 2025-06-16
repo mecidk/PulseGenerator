@@ -105,37 +105,3 @@ class signalGenerator855B:
     
     def outPutQuery(self, ch):
         print(self.sigGen.query(":OUTPut" + str(ch) + ":STATe?"))
-        
-
-
-       
-        
-        
-
-'''
-class SignalGenerator845:
-    def __init__(self):
-        self.rm = pyvisa.ResourceManager()
-        self.sigGen = self.rm.open_resource('USB0::0x03EB::0xAFFF::421-43A6D0610-1452::INSTR')
-        self.sigGen.read_termination = '\n'
-        self.sigGen.write_termination = '\n'
-        print(self.rm.list_resources())
-        
-    def query(self):
-        print(self.sigGen.query('*IDN?'))
-           
-    def amplMod(self,depth): # page 46
-        self.sigGen.write("SOURce:AM:DEPTh " + str(depth))
-        self.sigGen.write("SOURce:AM:SOURce EXTernal")
-        self.sigGen.write("SOURce:AM:STATe ON")
-        
-    def power(self,power): # page 29
-        self.sigGen.write("SOURce:POWer:AMPLitude " + str(power))
-        
-    def outputon(self):
-        self.sigGen.write("OUTP:ON")
-       
-    def freq(self,freqval=10): # page 29
-        freqapp = freqval*1000000000 # in GHz
-        self.sigGen.write('SOURce:FREQuency:CW ' + str(freqapp))
-'''

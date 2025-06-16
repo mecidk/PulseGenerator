@@ -260,12 +260,14 @@ def InitializeBNCLO():
     """
 
     LO_instance = signalGenerator855B()
-    LO_instance.outPutOff()  # turn off the output for safety
+    LO_instance.outPutOff(1)  # turn off the output for safety
+    LO_instance.outPutOff(2)  # turn off the output for safety
+
     print("BNC 855B Local Oscillator initialized")
 
     return LO_instance
 
-def TurnOnBNCLO(instance, freq = 5.0, power = 0.0, channel = 0):
+def TurnOnBNCLO(instance, freq = 5.0, power = 0.0, channel = 1):
     """
     This function sets the frequency and power of the BNC 855B local oscillator.
     It then turns on the output.
@@ -273,25 +275,25 @@ def TurnOnBNCLO(instance, freq = 5.0, power = 0.0, channel = 0):
 
     if (freq <= 0.0003 or freq >= 40.0):
         raise ValueError("Frequency must be between 300 kHz and 40 GHz")
-    instance.freq(1, channel, freq)  # set the frequency of the channel
+    instance.freq(channel, freq)  # set the frequency of the channel
     print(f"BNC LO channel {channel} frequency has been set to {freq} GHz")
 
     if (power <= -20 or power >= 25):
         raise ValueError("Power must be between -20 and 25 dBm")
-    instance.power(1, channel, power)  # set the power of channel 1
+    instance.power(channel, power)  # set the power of channel 1
     print(f"BNC LO channel {channel} power has been set to {power} dBm")
 
-    instance.outPutOn(1)  # turn on the output of channel 1
-    print("BNC LO output is ON")
+    instance.outPutOn(channel)  # turn on the output of channel 1
+    print(f"BNC LO channel {channel} output is ON")
 
-def TurnOffBNCLO(instance, channel = 0):
+def TurnOffBNCLO(instance, channel = 1):
     """
     This function turns off the output of the BNC 855B local oscillator.
     It sets the output off.
     """
 
-    instance.outPutOff(1)  # turn off the output of channel 1
-    print("BNC LO output is OFF")
+    instance.outPutOff(channel)  # turn off the output of channel 1
+    print(f"BNC LO channel {channel} output is OFF")
 
 def main(timestamp, sample, pulse_type = "gaussian", pulse_frequency = 120, pulse_width = 15, magnet_inst = None, magnet_current = 0.0, LO_inst = None, LO_frequency = 5.0, LO_power = 0.0, number_of_experiments = 1000, max_batch_size = 1000, note = ""):
     
@@ -325,9 +327,9 @@ def main(timestamp, sample, pulse_type = "gaussian", pulse_frequency = 120, puls
     #     TurnOffLO(LO_inst)
     #     raise RuntimeError("Local oscillator parameters are not set correctly. Please check the settings.")
 
-    TurnOnBNCLO(LO_inst, freq = LO_frequency, power = LO_power, channel = 0)  # turn on the BNC channel 0 with specified frequency and power
-    time.sleep(1)  # wait for the LO to stabilize
     TurnOnBNCLO(LO_inst, freq = LO_frequency, power = LO_power, channel = 1)  # turn on the BNC channel 0 with specified frequency and power
+    time.sleep(1)  # wait for the LO to stabilize
+    TurnOnBNCLO(LO_inst, freq = LO_frequency, power = LO_power, channel = 2)  # turn on the BNC channel 0 with specified frequency and power
     time.sleep(1)  # wait for the LO to stabilize
 
     url = 'http://128.174.248.50:5500/run' # this is the URL address that the server on the board is listening
@@ -433,8 +435,8 @@ def main(timestamp, sample, pulse_type = "gaussian", pulse_frequency = 120, puls
 
     # TurnOffLO(LO_inst)  # turn off the local oscillator after all experiments are done
 
-    TurnOffBNCLO(LO_inst, channel = 0)  # turn off the BNC channel 0 after all experiments are done
-    TurnOffBNCLO(LO_inst, channel = 1)  # turn off the BNC channel 1 after all experiments are done
+    TurnOffBNCLO(LO_inst, channel = 1)  # turn off the BNC channel 0 after all experiments are done
+    TurnOffBNCLO(LO_inst, channel = 2)  # turn off the BNC channel 1 after all experiments are done
     
 """
 This final part is just for future use of this code. When you run this file,
@@ -475,8 +477,8 @@ if __name__ == "__main__":
     # LO_instance.close_device()  # close the connection to the local oscillator
     # print("LO connection closed")
 
-    TurnOffBNCLO(LO_instance, channel = 0)  # double check that the BNC channel 0 is turned off
-    TurnOffBNCLO(LO_instance, channel = 1)  # double check that the BNC channel 1 is turned off
+    TurnOffBNCLO(LO_instance, channel = 1)  # double check that the BNC channel 0 is turned off
+    TurnOffBNCLO(LO_instance, channel = 2)  # double check that the BNC channel 1 is turned off
 
     endd = time.time()
     print(f"took {endd - startt} seconds")
