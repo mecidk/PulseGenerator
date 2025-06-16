@@ -6,6 +6,7 @@ from scipy.signal import iirnotch, filtfilt, welch
 import time
 from magnet_lib import Kepco
 from sc5511a_lib import SC5511A
+from bnc855b_lib import signalGenerator855B
 
 def PlotReadout(read, time_row, filename, no_of_experiments, batch_number):
     
@@ -252,6 +253,46 @@ def GetLOStatus(instance):
 
     return temperature, rf_params, device_status
 
+def InitializeBNCLO():
+    """
+    This function initializes the BNC 855B local oscillator by creating an instance of the signalGenerator855B class.
+    It then sets the output off.
+    """
+
+    LO_instance = signalGenerator855B()
+    LO_instance.outPutOff()  # turn off the output for safety
+    print("BNC 855B Local Oscillator initialized")
+
+    return LO_instance
+
+def TurnOnBNCLO(instance, freq = 5.0, power = 0.0, channel = 0):
+    """
+    This function sets the frequency and power of the BNC 855B local oscillator.
+    It then turns on the output.
+    """
+
+    if (freq <= 0.0003 or freq >= 40.0):
+        raise ValueError("Frequency must be between 300 kHz and 40 GHz")
+    instance.freq(1, channel, freq)  # set the frequency of the channel
+    print(f"BNC LO channel {channel} frequency has been set to {freq} GHz")
+
+    if (power <= -20 or power >= 25):
+        raise ValueError("Power must be between -20 and 25 dBm")
+    instance.power(1, channel, power)  # set the power of channel 1
+    print(f"BNC LO channel {channel} power has been set to {power} dBm")
+
+    instance.outPutOn(1)  # turn on the output of channel 1
+    print("BNC LO output is ON")
+
+def TurnOffBNCLO(instance, channel = 0):
+    """
+    This function turns off the output of the BNC 855B local oscillator.
+    It sets the output off.
+    """
+
+    instance.outPutOff(1)  # turn off the output of channel 1
+    print("BNC LO output is OFF")
+
 def main(timestamp, sample, pulse_type = "gaussian", pulse_frequency = 120, pulse_width = 15, magnet_inst = None, magnet_current = 0.0, LO_inst = None, LO_frequency = 5.0, LO_power = 0.0, number_of_experiments = 1000, max_batch_size = 1000, note = ""):
     
     """
@@ -275,14 +316,19 @@ def main(timestamp, sample, pulse_type = "gaussian", pulse_frequency = 120, puls
         raise RuntimeError("Magnet current not set correctly.")
     time.sleep(5)  # wait for the magnet to stabilize
 
-    TurnOnLO(LO_inst, freq = LO_frequency, power = LO_power)  # turn on the local oscillator with the specified frequency and power
-    time.sleep(1)  # wait for the LO to stabilize
+    # TurnOnLO(LO_inst, freq = LO_frequency, power = LO_power)  # turn on the local oscillator with the specified frequency and power
+    # time.sleep(1)  # wait for the LO to stabilize
 
-    # check if the LO parameters are set correctly
-    (LO_temp, LO_rf_params, LO_status) = GetLOStatus(LO_inst)
-    if (LO_rf_params.rf1_freq != LO_frequency * 1e9 or LO_rf_params.rf_level != LO_power or not LO_status.operate_status.rf1_out_enable or LO_status.operate_status.rf1_standby):
-        TurnOffLO(LO_inst)
-        raise RuntimeError("Local oscillator parameters are not set correctly. Please check the settings.")
+    # # check if the LO parameters are set correctly
+    # (LO_temp, LO_rf_params, LO_status) = GetLOStatus(LO_inst)
+    # if (LO_rf_params.rf1_freq != LO_frequency * 1e9 or LO_rf_params.rf_level != LO_power or not LO_status.operate_status.rf1_out_enable or LO_status.operate_status.rf1_standby):
+    #     TurnOffLO(LO_inst)
+    #     raise RuntimeError("Local oscillator parameters are not set correctly. Please check the settings.")
+
+    TurnOnBNCLO(LO_inst, freq = LO_frequency, power = LO_power, channel = 0)  # turn on the BNC channel 0 with specified frequency and power
+    time.sleep(1)  # wait for the LO to stabilize
+    TurnOnBNCLO(LO_inst, freq = LO_frequency, power = LO_power, channel = 1)  # turn on the BNC channel 0 with specified frequency and power
+    time.sleep(1)  # wait for the LO to stabilize
 
     url = 'http://128.174.248.50:5500/run' # this is the URL address that the server on the board is listening
     
@@ -314,25 +360,25 @@ def main(timestamp, sample, pulse_type = "gaussian", pulse_frequency = 120, puls
         new_payload = payload.copy() # copy the original payload
         new_payload['number_of_expt'] = batch_size # set the number of experiments in this batch
 
-        # check the status of the LO device, if it is too hot, wait for it to cool down
-        (LO_temp, LO_rf_params, LO_status) =  GetLOStatus(LO_inst)
-        if LO_temp > 50:
-            TurnOffLO(LO_inst)
-            print(f"Local oscillator temperature is too high: {LO_temp} degC. Waiting for it to cool down...")
-            # wait until the temperature is below 50 degC
-            while LO_temp > 50:
-                time.sleep(5)
-                (LO_temp, LO_rf_params, LO_status) = GetLOStatus(LO_inst)
+        # # check the status of the LO device, if it is too hot, wait for it to cool down
+        # (LO_temp, LO_rf_params, LO_status) =  GetLOStatus(LO_inst)
+        # if LO_temp > 50:
+        #     TurnOffLO(LO_inst)
+        #     print(f"Local oscillator temperature is too high: {LO_temp} degC. Waiting for it to cool down...")
+        #     # wait until the temperature is below 50 degC
+        #     while LO_temp > 50:
+        #         time.sleep(5)
+        #         (LO_temp, LO_rf_params, LO_status) = GetLOStatus(LO_inst)
 
-            # turn the LO back on after cooling down
-            TurnOnLO(LO_inst, freq = LO_frequency, power = LO_power)
-            time.sleep(1)
+        #     # turn the LO back on after cooling down
+        #     TurnOnLO(LO_inst, freq = LO_frequency, power = LO_power)
+        #     time.sleep(1)
 
-            # check if the LO parameters are set correctly
-            (LO_temp, LO_rf_params, LO_status) = GetLOStatus(LO_inst)
-            if (LO_rf_params.rf1_freq != LO_frequency * 1e9 or LO_rf_params.rf_level != LO_power or not LO_status.operate_status.rf1_out_enable or LO_status.operate_status.rf1_standby):
-                TurnOffLO(LO_inst)
-                raise RuntimeError("Local oscillator parameters are not set correctly. Please check the settings.")
+        #     # check if the LO parameters are set correctly
+        #     (LO_temp, LO_rf_params, LO_status) = GetLOStatus(LO_inst)
+        #     if (LO_rf_params.rf1_freq != LO_frequency * 1e9 or LO_rf_params.rf_level != LO_power or not LO_status.operate_status.rf1_out_enable or LO_status.operate_status.rf1_standby):
+        #         TurnOffLO(LO_inst)
+        #         raise RuntimeError("Local oscillator parameters are not set correctly. Please check the settings.")
 
         print(f"Sending batch of {batch_size} experiments...")
 
@@ -384,7 +430,11 @@ def main(timestamp, sample, pulse_type = "gaussian", pulse_frequency = 120, puls
     print(f"SNR (linear): {snr:.2f}, SNR (dB): {snr_dB:.2f} dB")
 
     RampMagnetCurrent(magnet_inst, 0.0)  # turn off the magnet after all experiments are done
-    TurnOffLO(LO_inst)  # turn off the local oscillator after all experiments are done
+
+    # TurnOffLO(LO_inst)  # turn off the local oscillator after all experiments are done
+
+    TurnOffBNCLO(LO_inst, channel = 0)  # turn off the BNC channel 0 after all experiments are done
+    TurnOffBNCLO(LO_inst, channel = 1)  # turn off the BNC channel 1 after all experiments are done
     
 """
 This final part is just for future use of this code. When you run this file,
@@ -400,7 +450,8 @@ if __name__ == "__main__":
 
     magnet_instance = InitializeMagnet(GPIB_channel = 1)  # initialize the magnet
 
-    LO_instance = InitializeLO(serial_no = "10003FAC")
+    # LO_instance = InitializeLO(serial_no = "10003FAC") # initialize the SC5511A local oscillator
+    LO_instance = InitializeBNCLO() # initialize the BNC 855B local oscillator
 
     main(
         timestamp = timestamp,                                      # current time, labeling purposes
@@ -412,16 +463,20 @@ if __name__ == "__main__":
         magnet_current = -3.0,                                      # current to set the magnet to, in Amperes
         LO_inst = LO_instance,                                      # instance of the local oscillator control class, technical purposes
         LO_frequency = 5.263,                                       # local oscillator frequency in GHz
-        LO_power = 18.0,                                            # local oscillator power in dBm
-        number_of_experiments = 1000,                               # total number of experiments
+        LO_power = 17.0,                                            # local oscillator power in dBm
+        number_of_experiments = 1,                               # total number of experiments
         max_batch_size = 1000,                                      # maximum number of experiments in one batch (in one go)
-        note = "4.8GHz LPF at rf amp & 1GHz LPF at ADC of rfsoc"    # notes for the experiment, labeling purposes
+        note = "new IF amp before ADC, 100 MHz BPF at ADC, BNC generator"    # notes for the experiment, labeling purposes
     )
 
     RampMagnetCurrent(magnet_instance, 0.0)  # double check that the magnet is turned off
-    TurnOffLO(LO_instance)  # double check that the local oscillator is turned off
-    LO_instance.close_device()  # close the connection to the local oscillator
-    print("LO connection closed")
+
+    # TurnOffLO(LO_instance)  # double check that the local oscillator is turned off
+    # LO_instance.close_device()  # close the connection to the local oscillator
+    # print("LO connection closed")
+
+    TurnOffBNCLO(LO_instance, channel = 0)  # double check that the BNC channel 0 is turned off
+    TurnOffBNCLO(LO_instance, channel = 1)  # double check that the BNC channel 1 is turned off
 
     endd = time.time()
     print(f"took {endd - startt} seconds")
