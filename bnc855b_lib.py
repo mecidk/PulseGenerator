@@ -62,7 +62,8 @@ class signalGenerator855B:
         
     def freqQuery(self, ch):
         freq = float(self.sigGen.query("SOURce" + str(ch) + ":FREQuency:CW?"))/10**9
-        print(str(freq) + " GHz")           
+        # print(str(freq) + " GHz")
+        return freq       
         
     def amplMod(self, ch, depth, mod_freq): # page 60, ch = 1 or 2
         # This signal generator has only internal modulation. DO NOT WRITE INTERNAL MODE.
@@ -93,7 +94,8 @@ class signalGenerator855B:
               
     def powerQuery(self, ch): # page 29
         power = float(self.sigGen.query(":SOURce" + str(ch) + ":POWer:AMPLitude?"))
-        print(str(power) + " dBm")
+        # print(str(power) + " dBm")
+        return power
     
     def outPutOn(self, ch):
         self.sigGen.write(":OUTPut" + str(ch) + ":STATe ON")
@@ -104,4 +106,6 @@ class signalGenerator855B:
         print('output is: ' + self.sigGen.query(":OUTPut" + str(ch) + ":STATe?"))
     
     def outPutQuery(self, ch):
-        print(self.sigGen.query(":OUTPut" + str(ch) + ":STATe?"))
+        output_state = self.sigGen.query(":OUTPut" + str(ch) + ":STATe?")
+        # print(output_state)
+        return output_state
