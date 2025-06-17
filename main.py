@@ -423,7 +423,7 @@ def main(timestamp, sample, pulse_type = "gaussian", pulse_frequency = 120, puls
 
         all_avg_data.append(avg_data)  # append the average data to the list of all average data
 
-        AppendToTXTFile(filename, avg_data)  # append the average data and the time row to the .txt file
+        AppendToTXTFile(filename, avg_data[np.newaxis, :])  # append the average data and the time row to the .txt file
     
         print(f"Batch {i // max_batch_size + 1} processed successfully")
         time.sleep(1)  # wait for a bit to avoid overwhelming the server
@@ -432,8 +432,8 @@ def main(timestamp, sample, pulse_type = "gaussian", pulse_frequency = 120, puls
     result = np.vstack([all_avg_data, np.mean(all_avg_data, axis = 0), time_row])
 
     # append the final average data and the time row to the .txt file
-    AppendToTXTFile(filename, result[-2])
-    AppendToTXTFile(filename, result[-1])
+    AppendToTXTFile(filename, result[-2][np.newaxis, :])
+    AppendToTXTFile(filename, result[-1][np.newaxis, :])
 
     # plot the final readout and PSD of the averaged data
     PlotReadout(result[-2], time_row, filename, number_of_experiments, 9999)
