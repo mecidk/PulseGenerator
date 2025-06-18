@@ -179,8 +179,14 @@ def RampMagnetCurrent(instance, current = 0.0):
     print(f"Ramping current to {current} A")
     instance.ramp_current(float(instance.get_current()), current, 0.01, 0.05) # set the current to the desired value by ramping
     print(f"Current ramped to {current} A")
+
+    # check if the current read is within the expected range
     curr_read = float(instance.get_current())
-    print(f"Current Read: {curr_read}")
+    if abs(curr_read - current) > 0.001:
+        print("Current read is not within the expected range. Retrying...")
+        curr_read = RampMagnetCurrent(instance, current)
+
+    print(f"Current read: {curr_read} A")
     
     return curr_read
 
@@ -213,6 +219,11 @@ def InitializeLO(LO_type = ""):
     return LO_instance
 
 def TurnOnLO(instance, freq = 1.0, power = 0.0):
+
+    """
+    This function turns on the local oscillator (LO) by setting the frequency and power.
+    It takes the instance of the LO class, frequency in GHz, and power in dBm as input.
+    """
 
     if isinstance(instance, SC5511A):
 
@@ -250,6 +261,10 @@ def TurnOnLO(instance, freq = 1.0, power = 0.0):
         raise ValueError("Unsupported LO instance. Please use an instance of SC5511A or signalGenerator855B")
 
 def TurnOffLO(instance):
+    """
+    This function turns off the local oscillator (LO) by setting the output to False.
+    It takes the instance of the LO class as input.
+    """
 
     if isinstance(instance, SC5511A):
 
@@ -277,6 +292,13 @@ def TurnOffLO(instance):
         raise ValueError("Unsupported LO instance. Please use an instance of SC5511A or signalGenerator855B")
     
 def GetLOStatus(instance):
+
+    """
+    This function retrieves the status of the local oscillator (LO).
+    It returns the temperature, RF parameters, and device status.
+    Temperature is only available for SC5511A, so it will be 0 for signalGenerator855B.
+
+    """
 
     if isinstance(instance, SC5511A):
 
