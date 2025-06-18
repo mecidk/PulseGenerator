@@ -255,13 +255,23 @@ def TurnOffLO(instance):
 
         instance.set_standby(1)  # turn on the standby mode
         instance.set_output(False)  # turn off the RF output
-        print("LO output is OFF")
+        # check if the output is turned off, if not call TurnOffLO again
+        if (instance.get_device_status().operate_status.rf1_standby) and (not instance.get_device_status().operate_status.rf1_out_enable):
+            print("LO output is OFF")
+        else:
+            print("Failed to turn off LO output, trying again...")
+            TurnOffLO(instance)
 
     elif isinstance(instance, signalGenerator855B):
 
         for channel in [1, 2]:
             instance.outPutOff(channel)  # turn off the output of channel 1
-            print(f"BNC LO channel {channel} output is OFF")
+        
+        if (not instance.outPutQuery(1)) and (not instance.outPutQuery(2)):
+            print("BNC LO output is OFF")
+        else:
+            print("Failed to turn off LO output, trying again...")
+            TurnOffLO(instance)
 
     else:
         raise ValueError("Unsupported LO instance. Please use an instance of SC5511A or signalGenerator855B")
@@ -291,17 +301,17 @@ def GetLOStatus(instance):
         temperature = 0 # BNC 855B does not provide temperature information
 
         rf_params = {
-            'rf1_freq': instance.freqQuery(1) * 1e-9,  # frequency in GHz
-            'rf2_freq': instance.freqQuery(2) * 1e-9,  # frequency in GHz
+            'rf1_freq': instance.freqQuery(1),  # frequency in GHz
+            'rf2_freq': instance.freqQuery(2),  # frequency in GHz
             'rf1_level': instance.powerQuery(1),  # power in dBm
             'rf2_level': instance.powerQuery(2)   # power in dBm
         }
 
         device_status = {
             'rf1_standby': False,  # BNC 855B does not have a standby mode
-            'rf1_out_enable': instance.outPutQuery(1) == 'ON',
+            'rf1_out_enable': instance.outPutQuery(1),
             'rf2_standby': False,   # BNC 855B does not have a standby mode
-            'rf2_out_enable': instance.outPutQuery(2) == 'ON'
+            'rf2_out_enable': instance.outPutQuery(2)
         }
     
     else:

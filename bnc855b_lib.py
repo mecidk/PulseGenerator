@@ -108,4 +108,4 @@ class signalGenerator855B:
     def outPutQuery(self, ch):
         output_state = self.sigGen.query(":OUTPut" + str(ch) + ":STATe?")
         # print(output_state)
-        return output_state
+        return float(output_state)
