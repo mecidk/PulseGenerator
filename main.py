@@ -86,7 +86,7 @@ def StartTXTFile(filename, timestamp, sample, channel, payload, number_of_experi
     file = open("data/data_" + filename + ".txt", "w")
     file.write(f"# Date and Time: {timestamp} #\n")
     file.write(f"# Sample: {sample} #\n")
-    file.write(f"# Channel: {channel} #\n")
+    file.write("# Channel: 0, sample #\n" if channel == 0 else "# Channel: 1, loopback #\n")
     file.write(f"# Pulse Type: {payload['type']} #\n")
     file.write(f"# Pulse Frequency and Width: {payload['freq']} MHz, {payload['width'] * 4} ns #\n")
 
@@ -419,7 +419,10 @@ def main(timestamp, sample, channel = 0, pulse_type = "gaussian", pulse_frequenc
     all_batches_data = []  # this will hold the average data from all batches of experiments
 
     # define a filename to be used
-    filename = f"{timestamp}_Sample={sample}_Pulse={pulse_type}_{payload['freq']}MHz_AvgN={number_of_experiments}_MagnetI={magnet_current}_A"
+    if channel == 0:
+        filename = f"{timestamp}_Sample={sample}_Pulse={pulse_type}_{payload['freq']}MHz_AvgN={number_of_experiments}_MagnetI={magnet_current}_A"
+    else:
+        filename = f"{timestamp}_Sample={sample}_Pulse={pulse_type}_{payload['freq']}MHz_AvgN={number_of_experiments}_Loopback"
 
     # export the data to a .txt file
     StartTXTFile(filename, timestamp, sample, channel, payload, number_of_experiments, max_batch_size, use_batch_average, magnet_current, LO_frequency, LO_power, note)
@@ -485,7 +488,7 @@ def main(timestamp, sample, channel = 0, pulse_type = "gaussian", pulse_frequenc
         if use_batch_average:
             # if we are using batch averaging, we take the average of the data part
             avg_data = np.mean(filtered_data_part, axis = 0)
-            all_batches_data.append(avg_data)
+            all_batches_data.append(avg_data[np.newaxis, :])
 
             AppendToTXTFile(filename, avg_data[np.newaxis, :])  # append the average data row to the .txt file
 
@@ -493,24 +496,27 @@ def main(timestamp, sample, channel = 0, pulse_type = "gaussian", pulse_frequenc
             # if we are not using batch averaging, we append the whole data part to the all_batches_data
             all_batches_data.append(filtered_data_part)
 
-            AppendToTXTFile(filename, filtered_data_part[np.newaxis, :])  # append the whole data array to the .txt file
+            AppendToTXTFile(filename, filtered_data_part)  # append the whole data array to the .txt file
     
         print(f"Batch {i // max_batch_size + 1} processed successfully")
         time.sleep(1)  # wait for a bit to avoid overwhelming the server
  
-    # after all the batches are done, we stack the average data and the time row
-    result = np.vstack([all_batches_data, np.mean(all_batches_data, axis = 0), time_row])
+    # calculate the grand average of all batches
+    if use_batch_average:
+        grand_average = np.mean(all_batches_data, axis=0)
+    else:
+        grand_average = np.mean(all_batches_data[0], axis=0)
 
     # append the final average data and the time row to the .txt file
-    AppendToTXTFile(filename, result[-2][np.newaxis, :])
-    AppendToTXTFile(filename, result[-1][np.newaxis, :])
+    AppendToTXTFile(filename, grand_average[np.newaxis, :])
+    AppendToTXTFile(filename, time_row[np.newaxis, :])
 
     # plot the final readout and PSD of the averaged data
-    PlotReadout(result[-2], time_row, filename, number_of_experiments, 9999)
-    PlotPSD(result[-2], filename, fs, number_of_experiments, 9999)
+    PlotReadout(grand_average, time_row, filename, number_of_experiments, 9999)
+    PlotPSD(grand_average, filename, fs, number_of_experiments, 9999)
 
     # calculate the SNR of the averaged data
-    snr, snr_dB = CalculateSNR(result[-2])
+    snr, snr_dB = CalculateSNR(grand_average)
     print(f"SNR (linear): {snr:.2f}, SNR (dB): {snr_dB:.2f} dB")
 
     RampMagnetCurrent(magnet_inst, 0.0)  # turn off the magnet after all experiments are done
