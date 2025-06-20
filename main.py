@@ -77,7 +77,7 @@ def CalculateSNR(signal):
 
     return snr, snr_dB
 
-def StartTXTFile(filename, timestamp, sample, payload, number_of_experiments, max_batch_size, use_batch_average, magnet_current, LO_frequency,  LO_power, note):
+def StartTXTFile(filename, timestamp, sample, channel, payload, number_of_experiments, max_batch_size, use_batch_average, magnet_current, LO_frequency,  LO_power, note):
     
     """
     This function initiates a .txt file with a header containing metadata about the experiment.
@@ -86,16 +86,28 @@ def StartTXTFile(filename, timestamp, sample, payload, number_of_experiments, ma
     file = open("data/data_" + filename + ".txt", "w")
     file.write(f"# Date and Time: {timestamp} #\n")
     file.write(f"# Sample: {sample} #\n")
+    file.write(f"# Channel: {channel} #\n")
     file.write(f"# Pulse Type: {payload['type']} #\n")
     file.write(f"# Pulse Frequency and Width: {payload['freq']} MHz, {payload['width'] * 4} ns #\n")
-    file.write(f"# LO Frequency and Power: {LO_frequency} GHz, {LO_power} dBm #\n")
+
+    if channel == 0:
+        file.write(f"# LO Frequency and Power: {LO_frequency} GHz, {LO_power} dBm #\n")
+        file.write(f"# Magnet Current: {magnet_current} A #\n")
+    else:
+        file.write("# LO and Magnet are disabled in loopback mode #\n")
+    
     file.write(f"# Number of Experiments: {number_of_experiments} #\n")
     file.write(f"# Max Batch Size: {max_batch_size} #\n")
     file.write(f"# Is each batch averaged?: {use_batch_average} #\n")
-    file.write(f"# Magnet Current: {magnet_current} A #\n")
+
     file.write(f"# Note: {note} #\n")
-    file.write(f"# Data Format: Each row is a {max_batch_size}-experiment average #\n")
-    file.write(f"# The second-to-last row is the average of all rows above, i.e. average of all the {max_batch_size}-experiment runs #\n")
+
+    if use_batch_average:
+        file.write(f"# Data Format: Each row is a {max_batch_size}-experiment average #\n")
+    else:
+        file.write("# Data Format: Each row is an experiment #\n")
+
+    file.write("# The second-to-last row is the average of all rows above #\n")
     file.write("# The last row is the time row in ns #\n")
     file.close()
 
@@ -410,7 +422,7 @@ def main(timestamp, sample, channel = 0, pulse_type = "gaussian", pulse_frequenc
     filename = f"{timestamp}_Sample={sample}_Pulse={pulse_type}_{payload['freq']}MHz_AvgN={number_of_experiments}_MagnetI={magnet_current}_A"
 
     # export the data to a .txt file
-    StartTXTFile(filename, timestamp, sample, payload, number_of_experiments, max_batch_size, use_batch_average, magnet_current, LO_frequency, LO_power, note)
+    StartTXTFile(filename, timestamp, sample, channel, payload, number_of_experiments, max_batch_size, use_batch_average, magnet_current, LO_frequency, LO_power, note)
 
     for i in range(0, number_of_experiments, max_batch_size):
         batch_size = min(max_batch_size, number_of_experiments - i) # number of experiments in this batch
@@ -480,7 +492,7 @@ def main(timestamp, sample, channel = 0, pulse_type = "gaussian", pulse_frequenc
         else:
             # if we are not using batch averaging, we append the whole data part to the all_batches_data
             all_batches_data.append(filtered_data_part)
-            
+
             AppendToTXTFile(filename, filtered_data_part[np.newaxis, :])  # append the whole data array to the .txt file
     
         print(f"Batch {i // max_batch_size + 1} processed successfully")
