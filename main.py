@@ -503,7 +503,7 @@ def main(timestamp, sample, channel = 0, pulse_type = "gaussian", pulse_frequenc
  
     # calculate the grand average of all batches
     if use_batch_average:
-        grand_average = np.mean(all_batches_data, axis=0)
+        grand_average = np.mean(all_batches_data, axis=0)[0]
     else:
         grand_average = np.mean(all_batches_data[0], axis=0)
 
@@ -519,9 +519,10 @@ def main(timestamp, sample, channel = 0, pulse_type = "gaussian", pulse_frequenc
     snr, snr_dB = CalculateSNR(grand_average)
     print(f"SNR (linear): {snr:.2f}, SNR (dB): {snr_dB:.2f} dB")
 
-    RampMagnetCurrent(magnet_inst, 0.0)  # turn off the magnet after all experiments are done
+    if channel == 0:
+        RampMagnetCurrent(magnet_inst, 0.0)  # turn off the magnet after all experiments are done
 
-    TurnOffLO(LO_inst)  # turn off the local oscillator after all experiments are done
+        TurnOffLO(LO_inst)  # turn off the local oscillator after all experiments are done
     
 """
 This final part is just for future use of this code. When you run this file,

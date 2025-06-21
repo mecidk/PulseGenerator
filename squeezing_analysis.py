@@ -26,7 +26,29 @@ data_files = [
     ("06-19-data/data_20250619_193653_Sample=2024-Feb-Argn-YIG-2_5b-b1_Pulse=flat_top_400.0MHz_AvgN=3000_MagnetI=-0.0_A.txt", 400)
 ]
 
-for file_path, freq in data_files:
+new_data_files = [
+    ("06-20-data/data_20250620_181345_Sample=2024-Feb-Argn-YIG-2_5b-b1_Pulse=flat_top_40MHz_AvgN=300_Loopback.txt", 40),
+    ("06-20-data/data_20250620_181448_Sample=2024-Feb-Argn-YIG-2_5b-b1_Pulse=flat_top_60MHz_AvgN=300_Loopback.txt", 60),
+    ("06-20-data/data_20250620_181552_Sample=2024-Feb-Argn-YIG-2_5b-b1_Pulse=flat_top_80MHz_AvgN=300_Loopback.txt", 80),
+    ("06-20-data/data_20250620_181654_Sample=2024-Feb-Argn-YIG-2_5b-b1_Pulse=flat_top_100MHz_AvgN=300_Loopback.txt", 100),
+    ("06-20-data/data_20250620_181754_Sample=2024-Feb-Argn-YIG-2_5b-b1_Pulse=flat_top_120MHz_AvgN=300_Loopback.txt", 120),
+    ("06-20-data/data_20250620_181856_Sample=2024-Feb-Argn-YIG-2_5b-b1_Pulse=flat_top_140MHz_AvgN=300_Loopback.txt", 140),
+    ("06-20-data/data_20250620_181958_Sample=2024-Feb-Argn-YIG-2_5b-b1_Pulse=flat_top_160MHz_AvgN=300_Loopback.txt", 160),
+    ("06-20-data/data_20250620_182101_Sample=2024-Feb-Argn-YIG-2_5b-b1_Pulse=flat_top_180MHz_AvgN=300_Loopback.txt", 180),
+    ("06-20-data/data_20250620_182206_Sample=2024-Feb-Argn-YIG-2_5b-b1_Pulse=flat_top_200MHz_AvgN=300_Loopback.txt", 200),
+    ("06-20-data/data_20250620_182309_Sample=2024-Feb-Argn-YIG-2_5b-b1_Pulse=flat_top_220MHz_AvgN=300_Loopback.txt", 220),
+    ("06-20-data/data_20250620_182414_Sample=2024-Feb-Argn-YIG-2_5b-b1_Pulse=flat_top_240MHz_AvgN=300_Loopback.txt", 240),
+    ("06-20-data/data_20250620_182517_Sample=2024-Feb-Argn-YIG-2_5b-b1_Pulse=flat_top_260MHz_AvgN=300_Loopback.txt", 260),
+    ("06-20-data/data_20250620_182618_Sample=2024-Feb-Argn-YIG-2_5b-b1_Pulse=flat_top_280MHz_AvgN=300_Loopback.txt", 280),
+    ("06-20-data/data_20250620_182719_Sample=2024-Feb-Argn-YIG-2_5b-b1_Pulse=flat_top_300MHz_AvgN=300_Loopback.txt", 300),
+    ("06-20-data/data_20250620_182821_Sample=2024-Feb-Argn-YIG-2_5b-b1_Pulse=flat_top_320MHz_AvgN=300_Loopback.txt", 320),
+    ("06-20-data/data_20250620_182927_Sample=2024-Feb-Argn-YIG-2_5b-b1_Pulse=flat_top_340MHz_AvgN=300_Loopback.txt", 340),
+    ("06-20-data/data_20250620_183029_Sample=2024-Feb-Argn-YIG-2_5b-b1_Pulse=flat_top_360MHz_AvgN=300_Loopback.txt", 360),
+    ("06-20-data/data_20250620_183130_Sample=2024-Feb-Argn-YIG-2_5b-b1_Pulse=flat_top_380MHz_AvgN=300_Loopback.txt", 380),
+    ("06-20-data/data_20250620_183232_Sample=2024-Feb-Argn-YIG-2_5b-b1_Pulse=flat_top_400MHz_AvgN=300_Loopback.txt", 400)
+]
+
+for file_path, freq in new_data_files:
 
     data = np.loadtxt(file_path, delimiter=',')
 
@@ -41,10 +63,11 @@ for file_path, freq in data_files:
     print(f"{freq} MHz noise variation: {noise_var:.4f}, "
           f"(max - min)/min percentage: {max_min_ratio * 100:.2f}%")
     
-    print(f"max: {np.max(data[-2]):.4f}, ")
+    print(f"one-shot max: {np.max(np.max(data[:-2], axis = 0)):.4f}, ")
+    print(f"averaged max: {np.max(data[-2]):.4f}")
 
-data_400 = np.loadtxt("06-19-data/data_20250619_193653_Sample=2024-Feb-Argn-YIG-2_5b-b1_Pulse=flat_top_400.0MHz_AvgN=3000_MagnetI=-0.0_A.txt", delimiter=',')
-data_120 = np.loadtxt("06-19-data/data_20250619_154502_Sample=2024_Feb_Argn_YIG_2_5b_b1_Pulse=flat.txt", delimiter=',')
+data_400 = np.loadtxt(new_data_files[-1][0], delimiter=',')
+data_120 = np.loadtxt(new_data_files[4][0], delimiter=',')
 data_400_noise = np.std(data_400[:-2], axis=0)
 data_120_noise = np.std(data_120[:-2], axis=0)
 
@@ -59,7 +82,7 @@ for i in range(2):
     ax2 = ax1.twinx()
 
     # Replace these with your actual data arrays
-    ax1.plot(bigdata[i][-1], bigdata[i][-2], label=f"{120 + i*280} MHz", color='tab:blue')
+    ax1.plot(bigdata[i][-1], bigdata[i][0], label=f"{120 + i*280} MHz", color='tab:blue')
     ax1.set_ylabel("a.u.", color='tab:blue')
     ax1.tick_params(axis='y', labelcolor='tab:blue')
 
@@ -71,7 +94,7 @@ for i in range(2):
     ax2.set_xlim(left=25, right=150)
 
     ax1.set_xlabel("ns")
-    ax1.set_title(f"Plot {i+1}")
+    plt.suptitle("One-shot Noise Analysis")
 
     # Optional: Combine legends
     lines1, labels1 = ax1.get_legend_handles_labels()
