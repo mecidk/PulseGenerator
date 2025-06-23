@@ -4,14 +4,15 @@ import tkinter as tk
 from tkinter import ttk, filedialog, simpledialog, messagebox
 import os
 
-class LegendColumnPlotter:
+class RowSelectPlotter:
     def __init__(self, root):
         self.root = root
-        self.root.title("Data Plotter")
-        self.root.geometry("800x600")
-        
+        self.root.title("Row Data Plotter with Row Selection")
+        self.root.geometry("900x700")
         self.files = []
         self.legend_labels = []
+        self.x_row = tk.IntVar(value=-1) 
+        self.y_row = tk.IntVar(value=-2)
         
         self.create_widgets()
     
@@ -19,12 +20,28 @@ class LegendColumnPlotter:
         main_frame = ttk.Frame(self.root, padding="10")
         main_frame.pack(fill=tk.BOTH, expand=True)
         
-        self.tree = ttk.Treeview(main_frame, columns=('File', 'Legend'), show='headings')
+        settings_frame = ttk.LabelFrame(main_frame, text="Row Selection", padding="10")
+        settings_frame.pack(fill=tk.X, pady=5)
+        
+        ttk.Label(settings_frame, text="X-axis row index:").grid(row=0, column=0, sticky=tk.W)
+        ttk.Entry(settings_frame, textvariable=self.x_row, width=5).grid(row=0, column=1, sticky=tk.W)
+        
+        ttk.Label(settings_frame, text="Y-axis row index:").grid(row=1, column=0, sticky=tk.W)
+        ttk.Entry(settings_frame, textvariable=self.y_row, width=5).grid(row=1, column=1, sticky=tk.W)
+        
+        tree_frame = ttk.Frame(main_frame)
+        tree_frame.pack(fill=tk.BOTH, expand=True, pady=5)
+        
+        self.tree = ttk.Treeview(tree_frame, columns=('File', 'Legend'), show='headings')
         self.tree.heading('File', text='File Name')
         self.tree.heading('Legend', text='Legend Label')
-        self.tree.column('File', width=300, anchor=tk.W)
+        self.tree.column('File', width=400, anchor=tk.W)
         self.tree.column('Legend', width=300, anchor=tk.W)
-        self.tree.pack(fill=tk.BOTH, expand=True, pady=5)
+        self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        
+        scrollbar = ttk.Scrollbar(tree_frame, orient=tk.VERTICAL, command=self.tree.yview)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.tree.configure(yscrollcommand=scrollbar.set)
         
         btn_frame = ttk.Frame(main_frame)
         btn_frame.pack(fill=tk.X, pady=5)
@@ -36,7 +53,7 @@ class LegendColumnPlotter:
         ttk.Button(btn_frame, text="Clear All", command=self.clear_all).pack(side=tk.LEFT, padx=2)
     
     def add_files(self):
-        new_files = filedialog.askopenfilenames(filetypes=[("Text files", "*.txt")])
+        new_files = filedialog.askopenfilenames(filetypes=[("Text files", "*.txt"), ("All files", "*.*")])
         if new_files:
             for f in new_files:
                 self.files.append(f)
@@ -68,7 +85,7 @@ class LegendColumnPlotter:
         if not selection:
             return
             
-        for item in reversed(selection):  # Reverse to prevent index shifting
+        for item in reversed(selection):
             index = self.tree.index(item)
             del self.files[index]
             del self.legend_labels[index]
@@ -79,25 +96,38 @@ class LegendColumnPlotter:
             messagebox.showwarning("No Files", "Please add files first")
             return
         
-        fig, ax = plt.subplots(figsize=(8, 5))
+        try:
+            x_idx = int(self.x_row.get())
+            y_idx = int(self.y_row.get())
+        except ValueError:
+            messagebox.showerror("Invalid Input", "Row indices must be integers")
+            return
+        
+        fig, ax = plt.subplots(figsize=(9, 6))
         
         for i, file in enumerate(self.files):
             try:
                 data = np.loadtxt(file, delimiter=',')
-                if len(data) >= 2:
-                    ax.plot(
-                        data[-1],  # Last row as X
-                        data[-2],  # Second last row as Y
-                        label=self.legend_labels[i],
-                    )
+            
+                x_data = data[x_idx] if x_idx >= 0 else data[x_idx]
+                y_data = data[y_idx] if y_idx >= 0 else data[y_idx]
+                
+                ax.plot(
+                    x_data,
+                    y_data,
+                    label=self.legend_labels[i],
+                )
             except Exception as e:
                 print(f"Error plotting {file}: {e}")
+                continue
         
-        ax.set_xlabel("ns")
-        ax.set_ylabel("a. u.")
-        ax.legend(loc='upper right')
+        ax.set_xlabel(f"Row {x_idx} Values")
+        ax.set_ylabel(f"Row {y_idx} Values")
+        ax.set_title(f"Plotting Row {y_idx} vs Row {x_idx}")
+        ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
         ax.grid(True)
         
+        plt.tight_layout()
         plt.show()
     
     def clear_all(self):
@@ -108,5 +138,5 @@ class LegendColumnPlotter:
 
 if __name__ == "__main__":
     root = tk.Tk()
-    app = LegendColumnPlotter(root)
+    app = RowSelectPlotter(root)
     root.mainloop()
