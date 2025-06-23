@@ -219,13 +219,11 @@ def InitializeLO(LO_type = ""):
         LO_instance.set_output(False) # turn off the RF output
         LO_instance.set_rf2_standby(1) # turn on the standby mode of RF2
         print("Local Oscillator initialized")
-
     elif LO_type == "BNC855B":
         LO_instance = signalGenerator855B()
         LO_instance.outPutOff(1)  # turn off the output for safety
         LO_instance.outPutOff(2)  # turn off the output for safety
         print("BNC 855B Local Oscillator initialized")
-
     else:
         raise ValueError("Unsupported LO type. Please use 'SC5511A' or 'BNC855B'")
     
@@ -253,9 +251,7 @@ def TurnOnLO(instance, freq = 1.0, power = 0.0):
         instance.set_standby(0) # turn off the standby mode
         instance.set_output(True)  # turn on the RF output
         print("LO output is ON")
-
     elif isinstance(instance, signalGenerator855B):
-
         for channel in [1, 2]:
             if (freq <= 0.0003 or freq >= 40.0):
                 raise ValueError("Frequency must be between 300 kHz and 40 GHz")
@@ -269,7 +265,6 @@ def TurnOnLO(instance, freq = 1.0, power = 0.0):
 
             instance.outPutOn(channel)  # turn on the output of channel 1
             print(f"BNC LO channel {channel} output is ON")
-
     else:
         raise ValueError("Unsupported LO instance. Please use an instance of SC5511A or signalGenerator855B")
 
@@ -289,7 +284,6 @@ def TurnOffLO(instance):
         else:
             print("Failed to turn off LO output, trying again...")
             TurnOffLO(instance)
-
     elif isinstance(instance, signalGenerator855B):
 
         for channel in [1, 2]:
@@ -300,7 +294,6 @@ def TurnOffLO(instance):
         else:
             print("Failed to turn off LO output, trying again...")
             TurnOffLO(instance)
-
     else:
         raise ValueError("Unsupported LO instance. Please use an instance of SC5511A or signalGenerator855B")
     
@@ -330,7 +323,6 @@ def GetLOStatus(instance):
             'rf2_standby': instance.get_device_status().operate_status.rf2_standby,
             'rf2_out_enable': True  # SC5511A does not have extra RF2 control, it is always enabled if not in standby
         }
-    
     elif isinstance(instance, signalGenerator855B):
 
         temperature = 0 # BNC 855B does not provide temperature information
@@ -348,7 +340,6 @@ def GetLOStatus(instance):
             'rf2_standby': False,   # BNC 855B does not have a standby mode
             'rf2_out_enable': instance.outPutQuery(2)
         }
-    
     else:
         raise ValueError("Unsupported LO instance. Please use an instance of SC5511A or signalGenerator855B")
 
@@ -374,7 +365,6 @@ def main(timestamp, sample, channel = 0, pulse_type = "gaussian", pulse_frequenc
     
     if channel == 1:
         print("Warning: Loopback ADC is selected, LO and magnet will be disabled.")
-
     elif channel == 0:
         current_read = RampMagnetCurrent(magnet_inst, magnet_current)  # turn on the magnet with specified current
         time.sleep(5)  # wait for the magnet to stabilize
@@ -386,10 +376,9 @@ def main(timestamp, sample, channel = 0, pulse_type = "gaussian", pulse_frequenc
 
         # check if the LO parameters are set correctly
         (LO_temp, LO_rf_params, LO_status) = GetLOStatus(LO_inst)
-        if (LO_rf_params["rf1_freq"] != LO_frequency or LO_rf_params["rf1_level"] != LO_power or not LO_status["rf1_out_enable"] or LO_status["rf1_standby"]):
+        if ((np.abs(LO_rf_params["rf1_freq"] - LO_frequency) > 1e-9) or (np.abs(LO_rf_params["rf1_level"] - LO_power) > 1e-3) or not LO_status["rf1_out_enable"] or LO_status["rf1_standby"]):
             TurnOffLO(LO_inst)
             raise RuntimeError("Local oscillator parameters are not set correctly. Please check the settings.")
-    
     else:
         raise ValueError("Channel must be either 0 (ADC_D) or 1 (ADC_C)")
 
@@ -451,18 +440,30 @@ def main(timestamp, sample, channel = 0, pulse_type = "gaussian", pulse_frequenc
 
                 # check if the LO parameters are set correctly
                 (LO_temp, LO_rf_params, LO_status) = GetLOStatus(LO_inst)
-                if (LO_rf_params["rf1_freq"] != LO_frequency or LO_rf_params["rf1_level"] != LO_power or not LO_status["rf1_out_enable"] or LO_status["rf1_standby"]):
+                if ((np.abs(LO_rf_params["rf1_freq"] - LO_frequency) > 1e-9) or (np.abs(LO_rf_params["rf1_level"] - LO_power) > 1e-3) or not LO_status["rf1_out_enable"] or LO_status["rf1_standby"]):
                     TurnOffLO(LO_inst)
                     raise RuntimeError("Local oscillator parameters are not set correctly. Please check the settings.")
-                
-            elif (LO_rf_params["rf1_freq"] != LO_frequency or LO_rf_params["rf1_level"] != LO_power or not LO_status["rf1_out_enable"] or LO_status["rf1_standby"]):
+            elif ((np.abs(LO_rf_params["rf1_freq"] - LO_frequency) > 1e-9) or (np.abs(LO_rf_params["rf1_level"] - LO_power) > 1e-3) or not LO_status["rf1_out_enable"] or LO_status["rf1_standby"]):
+                print("Local oscillator parameters are not set correctly. Turning it off and trying again...")
                 TurnOffLO(LO_inst)
-                raise RuntimeError("Local oscillator parameters are not set correctly. Please check the settings.")
+                TurnOnLO(LO_inst, freq = LO_frequency, power = LO_power)
+                time.sleep(1)
+                
+                # if still not set correctly, raise an error
+                (LO_temp, LO_rf_params, LO_status) = GetLOStatus(LO_inst)
+                if ((np.abs(LO_rf_params["rf1_freq"] - LO_frequency) > 1e-9) or (np.abs(LO_rf_params["rf1_level"] - LO_power) > 1e-3) or not LO_status["rf1_out_enable"] or LO_status["rf1_standby"]):
+                    TurnOffLO(LO_inst)
+                    raise RuntimeError("Local oscillator parameters are not set correctly. Please check the settings.")
             
-            # check the status of the magnet, if it is not set to the desired current, raise an error
+            # check the status of the magnet, if it is not set to the desired current, try again
             curr_read = float(magnet_inst.get_current())
             if abs(curr_read - magnet_current) > 0.001:
                 RampMagnetCurrent(magnet_inst, magnet_current)
+                time.sleep(5)  # wait for the magnet to stabilize
+                curr_read = float(magnet_inst.get_current())
+                
+                if abs(curr_read - magnet_current) > 0.001:
+                    raise RuntimeError("Magnet current not set correctly. Please check the settings.")
 
         print(f"Sending batch of {batch_size} experiments...")
 
@@ -491,7 +492,6 @@ def main(timestamp, sample, channel = 0, pulse_type = "gaussian", pulse_frequenc
             all_batches_data.append(avg_data[np.newaxis, :])
 
             AppendToTXTFile(filename, avg_data[np.newaxis, :])  # append the average data row to the .txt file
-
         else:
             # if we are not using batch averaging, we append the whole data part to the all_batches_data
             all_batches_data.append(filtered_data_part)
@@ -544,18 +544,18 @@ if __name__ == "__main__":
         timestamp = timestamp,                                      # current time, labeling purposes
         sample = "2024-Feb-Argn-YIG-2_5b-b1",                       # sample name, labeling purposes
         channel = 0,                                                # which ADC channel to read, 0 for ADC_D (sample), 1 for ADC_C (loopback). in the loopback mode, LO and the magnet are disabled
-        pulse_type = "gaussian",                                    # type of the pulse, can be "gaussian", "flat_top" or "const"
-        pulse_frequency = 120,                                      # pulse frequency in MHz, same for both DACs
+        pulse_type = "flat_top",                                    # type of the pulse, can be "gaussian", "flat_top" or "const"
+        pulse_frequency = 360,                                      # pulse frequency in MHz, same for both DACs
         pulse_width = 10,                                           # pulse width in "weird" units, see the comments in the main function   
         magnet_inst = magnet_instance,                              # instance of the magnet control class, technical purposes   
         magnet_current = -3.0,                                      # current to set the magnet to, in Amperes
         LO_inst = LO_instance,                                      # instance of the local oscillator control class, technical purposes
-        LO_frequency = 5.263,                                       # local oscillator frequency in GHz
+        LO_frequency = 5.023,                                       # local oscillator frequency in GHz
         LO_power = 17.0,                                            # local oscillator power in dBm
-        number_of_experiments = 3000,                                  # total number of experiments
+        number_of_experiments = 300,                                  # total number of experiments
         max_batch_size = 1000,                                      # maximum number of experiments in one batch (in one go)
-        use_batch_average = True,                                       # whether to average batches of experiments or not
-        note = "new IF amp before ADC, 100 MHz BPF at ADC, BNC generator"    # notes for the experiment, labeling purposes
+        use_batch_average = False,                                       # whether to average batches of experiments or not
+        note = "new pulse freq test run, with amplifiers and BPF"    # notes for the experiment, labeling purposes
     )
 
     RampMagnetCurrent(magnet_instance, 0.0)  # double check that the magnet is turned off

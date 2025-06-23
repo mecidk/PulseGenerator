@@ -48,7 +48,17 @@ new_data_files = [
     ("06-20-data/data_20250620_183232_Sample=2024-Feb-Argn-YIG-2_5b-b1_Pulse=flat_top_400MHz_AvgN=300_Loopback.txt", 400)
 ]
 
-for file_path, freq in new_data_files:
+new_new_data_files = [
+    ("06-23-data/data_20250623_120001_Sample=2024-Feb-Argn-YIG-2_5b-b1_Pulse=flat_top_450.0MHz_AvgN=300_Loopback.txt", 450),
+    ("06-23-data/data_20250623_120123_Sample=2024-Feb-Argn-YIG-2_5b-b1_Pulse=flat_top_500.0MHz_AvgN=300_Loopback.txt", 500),
+    ("06-23-data/data_20250623_120224_Sample=2024-Feb-Argn-YIG-2_5b-b1_Pulse=flat_top_550.0MHz_AvgN=300_Loopback.txt", 550),
+    ("06-23-data/data_20250623_120328_Sample=2024-Feb-Argn-YIG-2_5b-b1_Pulse=flat_top_600.0MHz_AvgN=300_Loopback.txt", 600),
+    ("06-23-data/data_20250623_120432_Sample=2024-Feb-Argn-YIG-2_5b-b1_Pulse=flat_top_650.0MHz_AvgN=300_Loopback.txt", 650)
+]
+
+final_noise_list = []
+
+for file_path, freq in (new_data_files + new_new_data_files):
 
     data = np.loadtxt(file_path, delimiter=',')
 
@@ -58,13 +68,36 @@ for file_path, freq in new_data_files:
     
     # calculate some metrics
     noise_var = np.max(noise_segment) - np.min(noise_segment)
-    max_min_ratio = (np.max(noise_segment) -  np.min(noise_segment)) / np.min(noise_segment)
+    max_min_ratio = (np.max(noise_segment) -  np.min(noise_segment)) / np.min(noise_segment) * 100
     
     print(f"{freq} MHz noise variation: {noise_var:.4f}, "
-          f"(max - min)/min percentage: {max_min_ratio * 100:.2f}%")
+          f"(max - min)/min percentage: {max_min_ratio:.2f}%")
     
     print(f"one-shot max: {np.max(np.max(data[:-2], axis = 0)):.4f}, ")
     print(f"averaged max: {np.max(data[-2]):.4f}")
+
+    final_noise_list.append((freq, noise_var, max_min_ratio, np.max(np.max(data[:-2], axis=0)), np.max(data[-2])))
+
+plt.figure()
+plt.plot([x[0] for x in final_noise_list], [x[2] for x in final_noise_list], marker='o', label='Noise Variation')
+plt.xlabel('Frequency (MHz)')
+plt.ylabel('(max-min)/min (%)')
+plt.title('Noise Variation vs Frequency')
+plt.grid()
+plt.yscale('log')
+plt.show()
+
+fig, axs = plt.subplots(1, 2, figsize=(10, 6))
+axs[0].plot([x[0] for x in final_noise_list], [x[3] for x in final_noise_list], marker='o')
+axs[0].set_xlabel('Frequency (MHz)')
+axs[0].set_ylabel('Amplitude (a.u.)')
+axs[0].set_title('Maximum Amplitude before Averaging vs Frequency')
+axs[1].plot([x[0] for x in final_noise_list], [x[4] for x in final_noise_list], marker='o')
+axs[1].set_xlabel('Frequency (MHz)')
+axs[1].set_ylabel('Amplitude (a.u.)')
+axs[1].set_title('Maximum Amplitude after Averaging vs Frequency')
+plt.grid()
+plt.show()
 
 data_400 = np.loadtxt(new_data_files[-1][0], delimiter=',')
 data_120 = np.loadtxt(new_data_files[4][0], delimiter=',')
@@ -102,4 +135,4 @@ for i in range(2):
     ax1.legend(lines1 + lines2, labels1 + labels2, loc='upper right')
 
 plt.tight_layout()
-plt.show()
+# plt.show()
