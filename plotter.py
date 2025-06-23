@@ -121,10 +121,9 @@ class RowSelectPlotter:
                 print(f"Error plotting {file}: {e}")
                 continue
         
-        ax.set_xlabel(f"Row {x_idx} Values")
-        ax.set_ylabel(f"Row {y_idx} Values")
-        ax.set_title(f"Plotting Row {y_idx} vs Row {x_idx}")
-        ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+        ax.set_xlabel("ns")
+        ax.set_ylabel("Amplitude (a.u.)")
+        ax.legend(loc='upper right')
         ax.grid(True)
         
         plt.tight_layout()
