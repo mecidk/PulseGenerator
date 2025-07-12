@@ -77,8 +77,15 @@ class PulseSequence(AveragerProgram): # type: ignore
         self.gate_set = cfg['gate_set']
 
         # set the nyquist zone
-        self.declare_gen(ch=cfg["q1_ch"], nqz=1)
-        self.declare_gen(ch=cfg["q2_ch"], nqz=1)
+        if cfg['q1_pulse_freq'] > 4800:
+            self.declare_gen(ch=cfg["q1_ch"], nqz=2)
+        else:
+            self.declare_gen(ch=cfg["q1_ch"], nqz=1)
+
+        if cfg['q2_pulse_freq'] > 4800:
+            self.declare_gen(ch=cfg["q2_ch"], nqz=2)
+        else:
+            self.declare_gen(ch=cfg["q2_ch"], nqz=1)
 
         # declare readout channels
         self.declare_readout(ch=0, freq=cfg['q1_read_freq'], length=cfg['readout_length'], sel='input')
@@ -124,12 +131,12 @@ class PulseSequence(AveragerProgram): # type: ignore
         self.wait_all()
         self.sync_all(self.us2cycles(self.cfg["relax_delay"]))
 
-def GeneratePulse(pulse_type = "gaussian", freq = 1000, width = 10, pulse_count = 1, trig_delay = 1, no_of_expt = 1, channel = 0):
+def GeneratePulse(pulse_type = "gaussian", freq = 1000, width = 10, pulse_count = 1, trig_delay = 1, no_of_expt = 1, freq_to_downconvert = 10):
     # transfer the input parameters to local variables
     q1_pulse_freq = freq 
-    q1_read_freq = 0
+    q1_read_freq = freq - freq_to_downconvert
     q2_pulse_freq = freq 
-    q2_read_freq = 0
+    q2_read_freq = freq - freq_to_downconvert
     pi_sigma_width = width * 1e-3
     
     # set up the config which is the main argument for QICK programs (default is for gaussian pulses)
@@ -192,20 +199,18 @@ def main():
     pulse_count = data.get("pulse_count")
     trigger_delay = data.get("trigger_delay")
     number_of_expt = data.get("number_of_expt")
-    channel = data.get("channel")
-    
-    readout = GeneratePulse(pulse_type, pulse_frequency, pulse_width, pulse_count, trigger_delay, number_of_expt, channel) # execute the main function
-    
-    time_row = (soc.cycles2us(np.arange(0, len(readout[0][:, 0])), ro_ch = channel) / 8)  # create the timestamps for each sample,
-                                                                                    # divide by 8 is due to ADC ticks being 8
-                                                                                    # times slower than the real clock cycles
-            
-    time_row = time_row + time_row[8] # since get_mr() function deletes the first 8 samples of the ADC (they are junk from
-                                      # previous reads), we add that lost time back.
+    freq_to_downconvert = data.get("freq_to_downconvert")
+
+    readout = GeneratePulse(pulse_type, pulse_frequency, pulse_width, pulse_count, trigger_delay, number_of_expt, freq_to_downconvert) # execute the main function
+
+    time_row = soc.cycles2us(np.arange(0, len(readout[0, 0, 0]), ro_ch=0))  # create the timestamps for each sample
     
     # create the response
     result = {
-        "array": np.vstack((readout[:, :, 0], time_row)).tolist()
+        "ch0_I": np.vstack((readout[:, 0, 0], time_row)).tolist(),
+        "ch0_Q": np.vstack((readout[:, 0, 1], time_row)).tolist(),
+        "ch1_I": np.vstack((readout[:, 1, 0], time_row)).tolist(),
+        "ch1_Q": np.vstack((readout[:, 1, 1], time_row)).tolist()
     }
     
     json.dump(result, sys.stdout) # send the response to the handler (server.py)

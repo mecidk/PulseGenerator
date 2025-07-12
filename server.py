@@ -12,14 +12,25 @@ def check_token():
 
 # actual code that will be run if a request is sent to /run
 @app.route('/run', methods=['POST'])
+
 def run():
     try:
         # get the input parameters from the request body
-        input_data = json.dumps(request.get_json()).encode()
+        input_json = request.get_json()
+        input_data = json.dumps(input_json).encode()
+
+        if input_json.get("mode") == "decimated":
+            # if the mode is decimated, run the main_pulser_decimated.py file
+            main_file = "main_pulser_decimated.py"
+        elif input_json.get("mode") == "raw":
+            # if the mode is raw, run the main_pulser.py file
+            main_file = "main_pulser.py"
+        else:
+            return jsonify({"error": "Invalid mode specified"}), 400
         
         # call the main file as a subprocess, this is just for better handling on OS level
         proc = subprocess.run(
-            ["python3", "main_pulser.py"],
+            ["python3", main_file],
             input = input_data, # send the parameters from the request body
             stdout = subprocess.PIPE, # get the output from the subprocess i.e. your main file
             stderr = subprocess.PIPE, # get the error
