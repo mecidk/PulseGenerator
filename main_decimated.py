@@ -22,15 +22,15 @@ def PlotReadout(read, time_row, filename, no_of_experiments, channel):
     plt.tight_layout()
 
     if channel == "0":
-        plt.title(f"Grand Averaged Magnitude, Channel 0")
+        plt.title(f"Magnitude, Grand Averaged over {no_of_experiments} experiments, Channel 0")
         plt.savefig("data/plot_" + filename + "_Channel_0.png", dpi=300, bbox_inches='tight')
     else:
-        plt.title(f"Grand Averaged Magnitude, Channel 1")
+        plt.title(f"Magnitude, Grand Averaged over {no_of_experiments} experiments, Channel 1")
         plt.savefig("data/plot_" + filename + "_Channel_1.png", dpi=300, bbox_inches='tight')
 
     plt.close()
 
-def PlotPSD(data, filename, fs, no_of_experiments, batch_number):
+def PlotPSD(data, filename, fs, no_of_experiments, channel):
 
     """
     This function plots the Power Spectral Density (PSD) of the data using Welch's method.
@@ -45,14 +45,13 @@ def PlotPSD(data, filename, fs, no_of_experiments, batch_number):
     plt.tight_layout()
 
     # this is just for naming the files properly, total average or batch average
-    if batch_number == 9999:
-        plt.title(f"PSD, Averaged over {no_of_experiments} experiments, Grand Average")
-        plt.savefig("data/PSD_" + filename + ".png", dpi=300, bbox_inches='tight')
+    if channel == 0:
+        plt.title(f"PSD, Averaged over {no_of_experiments} experiments, Channel 0")
+        plt.savefig("data/PSD_" + filename + "_Channel_0.png", dpi=300, bbox_inches='tight')
     else:
-        plt.title(f"PSD, Averaged over {no_of_experiments} experiments, Batch {batch_number}")
-        plt.savefig("data/PSD_" + filename + f"_Batch_{batch_number}.png", dpi=300, bbox_inches='tight')
-    
-    # plt.show()
+        plt.title(f"PSD, Averaged over {no_of_experiments} experiments, Channel 1")
+        plt.savefig("data/PSD_" + filename + "_Channel_1.png", dpi=300, bbox_inches='tight')
+
     plt.close()
 
 def CalculateSNR(signal):
@@ -75,95 +74,62 @@ def CalculateSNR(signal):
 
     return snr, snr_dB
 
-def StartTXTFile(filename, timestamp, sample, channel, payload, number_of_experiments, max_batch_size, use_batch_average, magnet_current, LO_frequency,  LO_power, note):
+def StartTXTFile(filename, timestamp, sample, payload, number_of_experiments, max_batch_size, use_batch_average, magnet_current, LO_frequency,  LO_power, note):
     
     """
-    This function initiates a .txt file with a header containing metadata about the experiment.
+    This function initiates .txt files with a headers containing metadata about the experiment.
     """
+    for index, signal_type in enumerate(["ch0_I", "ch0_Q", "ch1_I", "ch1_Q"]):
+        file = open("data/data_" + filename + f"_{signal_type}.txt", "w")
+        file.write(f"# Date and Time: {timestamp} #\n")
+        file.write(f"# Sample: {sample} #\n")
+        file.write(f"# Channel {signal_type[2]} {'In-phase' if signal_type[-1] == 'I' else 'Quadrature'} #\n")
+        file.write(f"# Pulse Type: {payload['type']} #\n")
+        file.write(f"# Pulse Frequency and Width: {payload['freq']} MHz, {payload['width'] * 4} ns #\n")
 
-    file = open("data/data_" + filename + ".txt", "w")
-    file.write(f"# Date and Time: {timestamp} #\n")
-    file.write(f"# Sample: {sample} #\n")
-    file.write("# Channel: 0, sample #\n" if channel == 0 else "# Channel: 1, loopback #\n")
-    file.write(f"# Pulse Type: {payload['type']} #\n")
-    file.write(f"# Pulse Frequency and Width: {payload['freq']} MHz, {payload['width'] * 4} ns #\n")
+        if index in [0, 1]:  # only for channel 0 and 1
+            file.write(f"# LO Frequency and Power: {LO_frequency} GHz, {LO_power} dBm #\n")
+            file.write(f"# Magnet Current: {magnet_current} A #\n")
+        else:
+            file.write("# Loopback mode, no LO and Magnet #\n")
 
-    if channel == 0:
-        file.write(f"# LO Frequency and Power: {LO_frequency} GHz, {LO_power} dBm #\n")
-        file.write(f"# Magnet Current: {magnet_current} A #\n")
-    else:
-        file.write("# LO and Magnet are disabled in loopback mode #\n")
-    
-    file.write(f"# Number of Experiments: {number_of_experiments} #\n")
-    file.write(f"# Max Batch Size: {max_batch_size} #\n")
-    file.write(f"# Is each batch averaged?: {use_batch_average} #\n")
+        file.write(f"# Number of Experiments: {number_of_experiments} #\n")
+        file.write(f"# Max Batch Size: {max_batch_size} #\n")
+        file.write(f"# Is each batch averaged?: {use_batch_average} #\n")
 
-    file.write(f"# Note: {note} #\n")
+        file.write(f"# Note: {note} #\n")
 
-    if use_batch_average:
-        file.write(f"# Data Format: Each row is a {max_batch_size}-experiment average #\n")
-    else:
-        file.write("# Data Format: Each row is an experiment #\n")
+        if use_batch_average:
+            file.write(f"# Data Format: Each row is a {max_batch_size}-experiment average #\n")
+        else:
+            file.write("# Data Format: Each row is an experiment #\n")
 
-    file.write("# The second-to-last row is the average of all rows above #\n")
-    file.write("# The last row is the time row in ns #\n")
-    file.close()
+        file.write("# The second-to-last row is the average of all rows above #\n")
+        file.write("# The last row is the time row in ns #\n")
+        file.close()
 
-def AppendToTXTFile(filename, myrow):
+def AppendToTXTFile(filename, data_type, data):
 
     """
     This function appends a row of data to the .txt file.
-    It takes the filename and the row of data as input.
+    It takes the filename, type of data (either 'array' or 'time'), and the data itself as input.
     """
 
-    if not isinstance(myrow, np.ndarray):
+    if not isinstance(data, np.ndarray):
         raise TypeError("Input must be a numpy array")
-    
-    # append the data to the file
-    file = open("data/data_" + filename + ".txt", "a")
-    np.savetxt(file, myrow, fmt = "%.18e", delimiter = ",")
-    file.close()
 
-def CreateNotchFilter(fs):
+    for index, signal_type in enumerate(["ch0_I", "ch0_Q", "ch1_I", "ch1_Q"]):
 
-    """
-    This function creates a notch filter to filter out the harmonics of the fundamental frequency.
-    It takes the raw signal and the sampling frequency as input, and returns the notch filter coefficients.
-    """
-    
-    # define notch filter parameters
-    f0 = fs / 8  # fundamental frequency to filter out (in Hz)
-    harmonics = [f0 * i for i in range (1, 5)]  # harmonics to filter out (in Hz)
-
-    # add some additional harmonics that are not exact multiples of the fundamental frequency
-    harmonics.append(984.96e6)
-    harmonics.append(1.47744e9)
-    harmonics.append(1.96992e9)
-    harmonics.append(838.08e6)
-
-    Q = 30.0  # quality factor for the notch filter, adjust for narrower or wider notches
-
-    # Create notch filters for each harmonic
-    notch_filters = []
-    for f_h in harmonics:
-        w0 = f_h / (fs / 2)  # Normalized frequency (0 to 1)
-        b, a = iirnotch(w0, Q)
-        notch_filters.append((b, a))
-    
-    return notch_filters
-
-def ApplyNotchFilter(raw_signal, filter_coeff):
-
-    """
-    This function applies the notch filter to the raw signal. It takes the raw signal and the filter coefficients as input,
-    and returns the filtered signal.
-    """
-
-    filtered_signal = raw_signal.copy()
-    for b, a in filter_coeff:
-        filtered_signal = filtfilt(b, a, filtered_signal)
-    
-    return filtered_signal
+        if data_type == "array":
+            file = open("data/data_" + filename + f"_{signal_type}.txt", "a")
+            np.savetxt(file, data[index], fmt = "%.18e", delimiter = ",")
+            file.close()
+        elif data_type == "time":
+            file = open("data/data_" + filename + f"_{signal_type}.txt", "a")
+            np.savetxt(file, data, fmt = "%.18e", delimiter = ",")
+            file.close()
+        else:
+            raise ValueError("data_type must be 'array' or 'time'")
 
 def InitializeMagnet(GPIB_channel = 1):
 
@@ -491,8 +457,8 @@ def main(timestamp, sample, frequency_to_downconvert = 0, channel = 0, pulse_typ
             all_batches_data_ch0_Q.append(avg_data_ch0_Q[np.newaxis, :])
             all_batches_data_ch1_I.append(avg_data_ch1_I[np.newaxis, :])
             all_batches_data_ch1_Q.append(avg_data_ch1_Q[np.newaxis, :])
-            
-            AppendToTXTFile(filename, data_type = "array", data = np.array([avg_data_ch0_I, avg_data_ch0_Q, avg_data_ch1_I, avg_data_ch1_Q]))
+
+            AppendToTXTFile(filename, data_type = "array", data = np.array([avg_data_ch0_I[np.newaxis, :], avg_data_ch0_Q[np.newaxis, :], avg_data_ch1_I[np.newaxis, :], avg_data_ch1_Q[np.newaxis, :]]))
         else:
             # if we are not using batch averaging, we append the whole data part to the all_batches_data
             all_batches_data_ch0_I.append(data_part_ch0_I)
@@ -520,7 +486,7 @@ def main(timestamp, sample, frequency_to_downconvert = 0, channel = 0, pulse_typ
     # append the final average data and the time row to the .txt file
     AppendToTXTFile(filename, data_type = "array", data = np.array([grand_average_ch0_I[np.newaxis, :], grand_average_ch0_Q[np.newaxis, :],
                                         grand_average_ch1_I[np.newaxis, :], grand_average_ch1_Q[np.newaxis, :]]))
-    AppendToTXTFile(filename, time_row[np.newaxis, :])
+    AppendToTXTFile(filename, data_type = "time", data = time_row[np.newaxis, :])
 
     # plot the final readout and PSD of the averaged data
     PlotReadout((grand_average_ch0_I + 1j * grand_average_ch0_Q), time_row, filename, number_of_experiments, channel = "0")
@@ -557,18 +523,18 @@ if __name__ == "__main__":
     main(
         timestamp = timestamp,                                      # current time, labeling purposes
         sample = "2024-Feb-Argn-YIG-2_5b-b1",                       # sample name, labeling purposes
-        frequency_to_downconvert = 0,                               # (only used in decimated downconversion mode) frequency to downconvert the signal
+        frequency_to_downconvert = 10,                               # (only used in decimated downconversion mode) frequency to downconvert the signal
         pulse_type = "flat_top",                                    # type of the pulse, can be "gaussian", "flat_top" or "const"
         pulse_frequency = 120,                                      # pulse frequency in MHz, same for both DACs
         pulse_width = 10,                                           # pulse width in "weird" units, see the comments in the main function   
         magnet_inst = magnet_instance,                              # instance of the magnet control class, technical purposes   
         magnet_current = -3.0,                                      # current to set the magnet to, in Amperes
         LO_inst = LO_instance,                                      # instance of the local oscillator control class, technical purposes
-        LO_frequency = 5.023,                                       # local oscillator frequency in GHz
+        LO_frequency = 5.263,                                       # local oscillator frequency in GHz
         LO_power = 17.0,                                            # local oscillator power in dBm
         number_of_experiments = 1000,                                # total number of experiments
         max_batch_size = 1000,                                      # maximum number of experiments in one batch (in one go)
-        use_batch_average = False,                                  # whether to average batches of experiments or not
+        use_batch_average = True,                                  # whether to average batches of experiments or not
         note = "decimated scheme test"                              # notes for the experiment, labeling purposes
     )
 
