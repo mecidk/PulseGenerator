@@ -2,7 +2,7 @@ import requests
 from datetime import datetime
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.signal import iirnotch, filtfilt, welch
+from scipy.signal import welch
 import time
 from magnet_lib import Kepco
 from sc5511a_lib import SC5511A
@@ -21,12 +21,12 @@ def PlotReadout(read, time_row, filename, no_of_experiments, channel):
     plt.ylabel("a.u.")
     plt.tight_layout()
 
-    if channel == "0":
+    if channel == 0:
         plt.title(f"Magnitude, Grand Averaged over {no_of_experiments} experiments, Channel 0")
-        plt.savefig("data/plot_" + filename + "_Channel_0.png", dpi=300, bbox_inches='tight')
+        plt.savefig("data/plot_" + filename + "_ch0.png", dpi=300, bbox_inches='tight')
     else:
         plt.title(f"Magnitude, Grand Averaged over {no_of_experiments} experiments, Channel 1")
-        plt.savefig("data/plot_" + filename + "_Channel_1.png", dpi=300, bbox_inches='tight')
+        plt.savefig("data/plot_" + filename + "_ch1.png", dpi=300, bbox_inches='tight')
 
     plt.close()
 
@@ -47,10 +47,10 @@ def PlotPSD(data, filename, fs, no_of_experiments, channel):
     # this is just for naming the files properly, total average or batch average
     if channel == 0:
         plt.title(f"PSD, Averaged over {no_of_experiments} experiments, Channel 0")
-        plt.savefig("data/PSD_" + filename + "_Channel_0.png", dpi=300, bbox_inches='tight')
+        plt.savefig("data/PSD_" + filename + "_ch0.png", dpi=300, bbox_inches='tight')
     else:
         plt.title(f"PSD, Averaged over {no_of_experiments} experiments, Channel 1")
-        plt.savefig("data/PSD_" + filename + "_Channel_1.png", dpi=300, bbox_inches='tight')
+        plt.savefig("data/PSD_" + filename + "_ch1.png", dpi=300, bbox_inches='tight')
 
     plt.close()
 
@@ -63,10 +63,10 @@ def CalculateSNR(signal):
     dividing it by the standard deviation of the noise region.
     """
 
-    pulse_region = signal[950:1390]
+    pulse_region = signal[72:90]
     signal_amplitude = np.max(pulse_region) - np.min(pulse_region)
 
-    noise_region = signal[1540:]
+    noise_region = signal[250:]
     noise_amplitude = np.std(noise_region)
 
     snr = signal_amplitude / noise_amplitude
@@ -74,7 +74,7 @@ def CalculateSNR(signal):
 
     return snr, snr_dB
 
-def StartTXTFile(filename, timestamp, sample, payload, number_of_experiments, max_batch_size, use_batch_average, magnet_current, LO_frequency,  LO_power, note):
+def StartTXTFile(filename, timestamp, sample, payload, number_of_experiments, max_batch_size, use_batch_average, magnet_current, LO_frequency,  LO_power, read_freq, note):
     
     """
     This function initiates .txt files with a headers containing metadata about the experiment.
@@ -84,6 +84,7 @@ def StartTXTFile(filename, timestamp, sample, payload, number_of_experiments, ma
         file.write(f"# Date and Time: {timestamp} #\n")
         file.write(f"# Sample: {sample} #\n")
         file.write(f"# Channel {signal_type[2]} {'In-phase' if signal_type[-1] == 'I' else 'Quadrature'} #\n")
+        file.write(f"# Downconverting Frequency: {read_freq} MHz #\n")
         file.write(f"# Pulse Type: {payload['type']} #\n")
         file.write(f"# Pulse Frequency and Width: {payload['freq']} MHz, {payload['width'] * 4} ns #\n")
 
@@ -91,7 +92,7 @@ def StartTXTFile(filename, timestamp, sample, payload, number_of_experiments, ma
             file.write(f"# LO Frequency and Power: {LO_frequency} GHz, {LO_power} dBm #\n")
             file.write(f"# Magnet Current: {magnet_current} A #\n")
         else:
-            file.write("# Loopback mode, no LO and Magnet #\n")
+            file.write("# Loopback channel, no LO and Magnet #\n")
 
         file.write(f"# Number of Experiments: {number_of_experiments} #\n")
         file.write(f"# Max Batch Size: {max_batch_size} #\n")
@@ -122,11 +123,11 @@ def AppendToTXTFile(filename, data_type, data):
 
         if data_type == "array":
             file = open("data/data_" + filename + f"_{signal_type}.txt", "a")
-            np.savetxt(file, data[index], fmt = "%.18e", delimiter = ",")
+            np.savetxt(file, data[index], fmt = "%.3e", delimiter = ",")
             file.close()
         elif data_type == "time":
             file = open("data/data_" + filename + f"_{signal_type}.txt", "a")
-            np.savetxt(file, data, fmt = "%.18e", delimiter = ",")
+            np.savetxt(file, data, fmt = "%.3e", delimiter = ",")
             file.close()
         else:
             raise ValueError("data_type must be 'array' or 'time'")
@@ -309,7 +310,7 @@ def GetLOStatus(instance):
 
     return temperature, rf_params, device_status
 
-def main(timestamp, sample, frequency_to_downconvert = 0, channel = 0, pulse_type = "gaussian", pulse_frequency = 120, pulse_width = 15, magnet_inst = None, magnet_current = 0.0, LO_inst = None, LO_frequency = 5.0, LO_power = 0.0, number_of_experiments = 1000, max_batch_size = 1000, use_batch_average = True,  note = ""):
+def main(timestamp, sample, pulse_type = "gaussian", pulse_frequency = 120, pulse_width = 15, read_frequency = 0, magnet_inst = None, magnet_current = 0.0, LO_inst = None, LO_frequency = 5.0, LO_power = 0.0, number_of_experiments = 1000, max_batch_size = 1000, use_batch_average = True,  note = ""):
     
     """
     This main function sends a request to the Flask (a type of web server)
@@ -353,12 +354,11 @@ def main(timestamp, sample, frequency_to_downconvert = 0, channel = 0, pulse_typ
                                                             # width = 50 -> real pulse width = 199.93ns
                                                             # width = 10 -> real pulse width = 49.83ns
         'pulse_count': 1,                                   # number of pulses to be generated back to back in one experiment
-        'trigger_delay': 1,                                 # delay amount of the triggering of the ADC buffer, essentially when to "press record", in us
+        'trigger_delay': 0.2,                               # delay amount of the triggering of the ADC buffer, essentially when to "press record", in us
                                                             # trigger_delay = 1 -> first pulse around t = 50ns
         'number_of_expt': 1,                                # how many experiments to be done, just a placeholder, will be set later
-        'freq_to_downconvert': frequency_to_downconvert     # (only used in decimated downconversion mode) frequency to downconvert the signal
+        'read_freq': read_frequency                         # frequency to downconvert the signal
     }
-
 
     fs = 552.96e6 # define decimated sampling frequency of the ADCs
 
@@ -370,7 +370,7 @@ def main(timestamp, sample, frequency_to_downconvert = 0, channel = 0, pulse_typ
     filename = f"decimated_{timestamp}_Sample={sample}_Pulse={pulse_type}_{payload['freq']}MHz_AvgN={number_of_experiments}_MagnetI={magnet_current}_A"
     
     # export the data to a .txt file
-    StartTXTFile(filename, timestamp, sample, payload, number_of_experiments, max_batch_size, use_batch_average, magnet_current, LO_frequency, LO_power, note)
+    StartTXTFile(filename, timestamp, sample, payload, number_of_experiments, max_batch_size, use_batch_average, magnet_current, LO_frequency, LO_power, read_frequency, note)
 
     for i in range(0, number_of_experiments, max_batch_size):
         batch_size = min(max_batch_size, number_of_experiments - i) # number of experiments in this batch
@@ -489,15 +489,15 @@ def main(timestamp, sample, frequency_to_downconvert = 0, channel = 0, pulse_typ
     AppendToTXTFile(filename, data_type = "time", data = time_row[np.newaxis, :])
 
     # plot the final readout and PSD of the averaged data
-    PlotReadout((grand_average_ch0_I + 1j * grand_average_ch0_Q), time_row, filename, number_of_experiments, channel = "0")
-    PlotReadout((grand_average_ch1_I + 1j * grand_average_ch1_Q), time_row, filename, number_of_experiments, channel = "1")
-    PlotPSD((grand_average_ch0_I + 1j * grand_average_ch0_Q), filename, fs, number_of_experiments, channel = "0")
-    PlotPSD((grand_average_ch1_I + 1j * grand_average_ch1_Q), filename, fs, number_of_experiments, channel = "1")
+    PlotReadout(np.abs(grand_average_ch0_I + 1j * grand_average_ch0_Q), time_row, filename, number_of_experiments, channel = 0)
+    # PlotReadout(np.abs(grand_average_ch1_I + 1j * grand_average_ch1_Q), time_row, filename, number_of_experiments, channel = 1)
+    PlotPSD(np.abs(grand_average_ch0_I + 1j * grand_average_ch0_Q), filename, fs, number_of_experiments, channel = 0)
+    # PlotPSD(np.abs(grand_average_ch1_I + 1j * grand_average_ch1_Q), filename, fs, number_of_experiments, channel = 1)
 
     # calculate the SNR of the averaged data
-    snr_ch0, snr_dB_ch0 = CalculateSNR(grand_average_ch0_I + 1j * grand_average_ch0_Q)
+    snr_ch0, snr_dB_ch0 = CalculateSNR(np.abs(grand_average_ch0_I + 1j * grand_average_ch0_Q))
     print(f"Channel 0 SNR (linear): {snr_ch0:.2f}, SNR (dB): {snr_dB_ch0:.2f} dB")
-    snr_ch1, snr_dB_ch1 = CalculateSNR(grand_average_ch1_I + 1j * grand_average_ch1_Q)
+    snr_ch1, snr_dB_ch1 = CalculateSNR(np.abs(grand_average_ch1_I + 1j * grand_average_ch1_Q))
     print(f"Channel 1 SNR (linear): {snr_ch1:.2f}, SNR (dB): {snr_dB_ch1:.2f} dB")
 
     RampMagnetCurrent(magnet_inst, 0.0)  # turn off the magnet after all experiments are done
@@ -523,19 +523,19 @@ if __name__ == "__main__":
     main(
         timestamp = timestamp,                                      # current time, labeling purposes
         sample = "2024-Feb-Argn-YIG-2_5b-b1",                       # sample name, labeling purposes
-        frequency_to_downconvert = 10,                               # (only used in decimated downconversion mode) frequency to downconvert the signal
         pulse_type = "flat_top",                                    # type of the pulse, can be "gaussian", "flat_top" or "const"
         pulse_frequency = 120,                                      # pulse frequency in MHz, same for both DACs
-        pulse_width = 10,                                           # pulse width in "weird" units, see the comments in the main function   
+        pulse_width = 10,                                           # pulse width in "weird" units, see the comments in the main function
+        read_frequency = 120,                                      # frequency used to downconvert the signal
         magnet_inst = magnet_instance,                              # instance of the magnet control class, technical purposes   
         magnet_current = -3.0,                                      # current to set the magnet to, in Amperes
         LO_inst = LO_instance,                                      # instance of the local oscillator control class, technical purposes
         LO_frequency = 5.263,                                       # local oscillator frequency in GHz
         LO_power = 17.0,                                            # local oscillator power in dBm
-        number_of_experiments = 1000,                                # total number of experiments
+        number_of_experiments = 300,                                # total number of experiments
         max_batch_size = 1000,                                      # maximum number of experiments in one batch (in one go)
-        use_batch_average = True,                                  # whether to average batches of experiments or not
-        note = "decimated scheme test"                              # notes for the experiment, labeling purposes
+        use_batch_average = False,                                  # whether to average batches of experiments or not
+        note = "decimated test second case: upconverting outside the board, rf amp, downconverting to 120 outside, IF amplifier"                              # notes for the experiment, labeling purposes
     )
 
     RampMagnetCurrent(magnet_instance, 0.0)  # double check that the magnet is turned off

@@ -88,8 +88,10 @@ class PulseSequence(AveragerProgram): # type: ignore
             self.declare_gen(ch=cfg["q2_ch"], nqz=1)
 
         # declare readout channels
-        self.declare_readout(ch=0, freq=cfg['q1_read_freq'], length=cfg['readout_length'], sel='input')
-        self.declare_readout(ch=1, freq=cfg['q2_read_freq'], length=cfg['readout_length'], sel='input')
+        for ch in cfg["ro_chs"]:
+            self.declare_readout(ch=ch, length=cfg["readout_length"],
+                                 freq=cfg["q" + str(ch + 1) +"_read_freq"], 
+                                 gen_ch=cfg["q" + str(ch + 1) +"_ch"])
 
         # convert frequency to DAC frequency (ensuring it is an available ADC frequency)
         self.freq_q1 = self.freq2reg(cfg["q1_pulse_freq"], gen_ch=cfg["q1_ch"], ro_ch=cfg["q1_ro_ch"])
@@ -131,12 +133,13 @@ class PulseSequence(AveragerProgram): # type: ignore
         self.wait_all()
         self.sync_all(self.us2cycles(self.cfg["relax_delay"]))
 
-def GeneratePulse(pulse_type = "gaussian", freq = 1000, width = 10, pulse_count = 1, trig_delay = 1, no_of_expt = 1, freq_to_downconvert = 10):
+def GeneratePulse(pulse_type = "gaussian", freq = 1000, width = 10, pulse_count = 1, trig_delay = 1, no_of_expt = 1, read_freq = 10):
     # transfer the input parameters to local variables
     q1_pulse_freq = freq 
-    q1_read_freq = freq - freq_to_downconvert
+    q1_read_freq = read_freq
     q2_pulse_freq = freq 
-    q2_read_freq = freq - freq_to_downconvert
+    q2_read_freq = freq
+    
     pi_sigma_width = width * 1e-3
     
     # set up the config which is the main argument for QICK programs (default is for gaussian pulses)
@@ -185,7 +188,7 @@ def GeneratePulse(pulse_type = "gaussian", freq = 1000, width = 10, pulse_count 
     for _ in range(no_of_expt):
         soc.reset_gens() # clear out any DC or periodic values from the generator channels
         iq_list = prog.acquire_decimated(soc, load_pulses=True, progress=False)
-        readout.append(iq_list) # read from the MR buffer
+        readout.append(iq_list) 
     
     return np.array(readout)
 
@@ -199,11 +202,11 @@ def main():
     pulse_count = data.get("pulse_count")
     trigger_delay = data.get("trigger_delay")
     number_of_expt = data.get("number_of_expt")
-    freq_to_downconvert = data.get("freq_to_downconvert")
+    read_freq = data.get("read_freq")
 
-    readout = GeneratePulse(pulse_type, pulse_frequency, pulse_width, pulse_count, trigger_delay, number_of_expt, freq_to_downconvert) # execute the main function
+    readout = GeneratePulse(pulse_type, pulse_frequency, pulse_width, pulse_count, trigger_delay, number_of_expt, read_freq) # execute the main function
 
-    time_row = soc.cycles2us(np.arange(0, len(readout[0, 0, 0]), ro_ch=0))  # create the timestamps for each sample
+    time_row = soc.cycles2us(np.arange(0, len(readout[0, 0, 0])), ro_ch=0)  # create the timestamps for each sample
     
     # create the response
     result = {
