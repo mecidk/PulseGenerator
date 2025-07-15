@@ -495,18 +495,20 @@ def main(timestamp, sample, channel = 0, pulse_type = "gaussian", pulse_frequenc
             AppendToTXTFile(filename, avg_data[np.newaxis, :])  # append the average data row to the .txt file
         else:
             # if we are not using batch averaging, we append the whole data part to the all_batches_data
-            all_batches_data.append(filtered_data_part)
+            all_batches_data.extend(filtered_data_part)
 
             AppendToTXTFile(filename, filtered_data_part)  # append the whole data array to the .txt file
     
         print(f"Batch {i // max_batch_size + 1} processed successfully")
         time.sleep(1)  # wait for a bit to avoid overwhelming the server
- 
+    
+    all_batches_data = np.array(all_batches_data)  # convert the list of arrays to a single numpy array
+
     # calculate the grand average of all batches
     if use_batch_average:
         grand_average = np.mean(all_batches_data, axis=0)[0]
     else:
-        grand_average = np.mean(np.mean(all_batches_data, axis=0), axis=0)
+        grand_average = np.mean(all_batches_data, axis=0)
 
     # append the final average data and the time row to the .txt file
     AppendToTXTFile(filename, grand_average[np.newaxis, :])
@@ -559,8 +561,6 @@ if __name__ == "__main__":
             use_batch_average = False,                                  # whether to average batches of experiments or not
             note = "new pulse freq test run, with amplifiers and BPF"   # notes for the experiment, labeling purposes
         )
-    except Exception as e:
-        print(f"An error occurred: {e}")
     finally:
         RampMagnetCurrent(magnet_instance, 0.0)  # double check that the magnet is turned off
 

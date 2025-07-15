@@ -30,19 +30,19 @@ class PulseSequence(AveragerProgram): # type: ignore
                         self.set_pulse_registers(ch=self.cfg["q2_ch"], freq=self.freq_q2,
                                                     phase=self.deg2reg(self.phase_ref_q2 + ginfo["phase"],
                                                     gen_ch=self.cfg["q2_ch"]), gain=ginfo["gain"], 
-                                                    waveform=g[q], phrst = 1,
+                                                    waveform=g[q], phrst = 0,
                                                     length = self.cfg["length"])
                     elif self.cfg["pulse_style"] == "const":
                         self.set_pulse_registers(ch=self.cfg["q2_ch"], freq=self.freq_q2,
                                                     phase=self.deg2reg(self.phase_ref_q2 + ginfo["phase"],
                                                     gen_ch=self.cfg["q2_ch"]), gain=ginfo["gain"], 
-                                                    phrst = 1, mode="oneshot",
+                                                    phrst = 0, mode="oneshot",
                                                     length = self.cfg["length"])
                     else:
                         self.set_pulse_registers(ch=self.cfg["q2_ch"], freq=self.freq_q2,
                                                     phase=self.deg2reg(self.phase_ref_q2 + ginfo["phase"],
                                                     gen_ch=self.cfg["q2_ch"]), gain=ginfo["gain"], 
-                                                    waveform=g[q], phrst = 1, mode="oneshot")
+                                                    waveform=g[q], phrst = 0, mode="oneshot")
                     self.pulse(ch=self.cfg["q2_ch"])
 
                 if q == "Q1": # Qubit 1
@@ -52,19 +52,19 @@ class PulseSequence(AveragerProgram): # type: ignore
                         self.set_pulse_registers(ch=self.cfg["q1_ch"], freq=self.freq_q1,
                                                     phase=self.deg2reg(self.phase_ref_q1 + ginfo["phase"],
                                                     gen_ch=self.cfg["q1_ch"]), gain=ginfo["gain"], 
-                                                    waveform=g[q], phrst = 1,
+                                                    waveform=g[q], phrst = 0,
                                                     length = self.cfg["length"])
                     elif self.cfg["pulse_style"] == "const":
                         self.set_pulse_registers(ch=self.cfg["q1_ch"], freq=self.freq_q1,
                                                     phase=self.deg2reg(self.phase_ref_q1 + ginfo["phase"],
                                                     gen_ch=self.cfg["q1_ch"]), gain=ginfo["gain"], 
-                                                    phrst = 1, mode="oneshot",
+                                                    phrst = 0, mode="oneshot",
                                                     length = self.cfg["length"])
                     else:
                         self.set_pulse_registers(ch=self.cfg["q1_ch"], freq=self.freq_q1,
                                                  phase=self.deg2reg(self.phase_ref_q1 + ginfo["phase"],
                                                  gen_ch=self.cfg["q1_ch"]), gain=ginfo["gain"], 
-                                                 waveform=g[q], phrst = 1, mode="oneshot")
+                                                 waveform=g[q], phrst = 0, mode="oneshot")
 
                     self.pulse(ch=self.cfg["q1_ch"])
             ################

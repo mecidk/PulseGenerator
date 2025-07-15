@@ -123,11 +123,11 @@ def AppendToTXTFile(filename, data_type, data):
 
         if data_type == "array":
             file = open("data/data_" + filename + f"_{signal_type}.txt", "a")
-            np.savetxt(file, data[index], fmt = "%.6e", delimiter = ",")
+            np.savetxt(file, data[index], fmt = "%.18e", delimiter = ",")
             file.close()
         elif data_type == "time":
             file = open("data/data_" + filename + f"_{signal_type}.txt", "a")
-            np.savetxt(file, data, fmt = "%.6e", delimiter = ",")
+            np.savetxt(file, data, fmt = "%.18e", delimiter = ",")
             file.close()
         else:
             raise ValueError("data_type must be 'array' or 'time'")
@@ -461,15 +461,20 @@ def main(timestamp, sample, pulse_type = "gaussian", pulse_frequency = 120, puls
             AppendToTXTFile(filename, data_type = "array", data = np.array([avg_data_ch0_I[np.newaxis, :], avg_data_ch0_Q[np.newaxis, :], avg_data_ch1_I[np.newaxis, :], avg_data_ch1_Q[np.newaxis, :]]))
         else:
             # if we are not using batch averaging, we append the whole data part to the all_batches_data
-            all_batches_data_ch0_I.append(data_part_ch0_I)
-            all_batches_data_ch0_Q.append(data_part_ch0_Q)
-            all_batches_data_ch1_I.append(data_part_ch1_I)
-            all_batches_data_ch1_Q.append(data_part_ch1_Q)
+            all_batches_data_ch0_I.extend(data_part_ch0_I)
+            all_batches_data_ch0_Q.extend(data_part_ch0_Q)
+            all_batches_data_ch1_I.extend(data_part_ch1_I)
+            all_batches_data_ch1_Q.extend(data_part_ch1_Q)
 
             AppendToTXTFile(filename, data_type = "array", data = np.array([data_part_ch0_I, data_part_ch0_Q, data_part_ch1_I, data_part_ch1_Q]))
 
         print(f"Batch {i // max_batch_size + 1} processed successfully")
         time.sleep(1)  # wait for a bit to avoid overwhelming the server
+
+    all_batches_data_ch0_I = np.array(all_batches_data_ch0_I)
+    all_batches_data_ch0_Q = np.array(all_batches_data_ch0_Q)
+    all_batches_data_ch1_I = np.array(all_batches_data_ch1_I)
+    all_batches_data_ch1_Q = np.array(all_batches_data_ch1_Q)
 
     # calculate the grand average of all batches
     if use_batch_average:
@@ -478,10 +483,10 @@ def main(timestamp, sample, pulse_type = "gaussian", pulse_frequency = 120, puls
         grand_average_ch1_I = np.mean(all_batches_data_ch1_I, axis=0)[0]
         grand_average_ch1_Q = np.mean(all_batches_data_ch1_Q, axis=0)[0]
     else:
-        grand_average_ch0_I = np.mean(np.mean(all_batches_data_ch0_I, axis=0), axis=0)
-        grand_average_ch0_Q = np.mean(np.mean(all_batches_data_ch0_Q, axis=0), axis=0)
-        grand_average_ch1_I = np.mean(np.mean(all_batches_data_ch1_I, axis=0), axis=0)
-        grand_average_ch1_Q = np.mean(np.mean(all_batches_data_ch1_Q, axis=0), axis=0)
+        grand_average_ch0_I = np.mean(all_batches_data_ch0_I, axis=0)
+        grand_average_ch0_Q = np.mean(all_batches_data_ch0_Q, axis=0)
+        grand_average_ch1_I = np.mean(all_batches_data_ch1_I, axis=0)
+        grand_average_ch1_Q = np.mean(all_batches_data_ch1_Q, axis=0)
 
     # append the final average data and the time row to the .txt file
     AppendToTXTFile(filename, data_type = "array", data = np.array([grand_average_ch0_I[np.newaxis, :], grand_average_ch0_Q[np.newaxis, :],
@@ -525,21 +530,19 @@ if __name__ == "__main__":
             timestamp = timestamp,                                      # current time, labeling purposes
             sample = "2024-Feb-Argn-YIG-2_5b-b1",                       # sample name, labeling purposes
             pulse_type = "flat_top",                                    # type of the pulse, can be "gaussian", "flat_top" or "const"
-            pulse_frequency = 120,                                      # pulse frequency in MHz, same for both DACs
+            pulse_frequency = 5383,                                      # pulse frequency in MHz, same for both DACs
             pulse_width = 10,                                           # pulse width in "weird" units, see the comments in the main function
-            read_frequency = 120,                                      # frequency used to downconvert the signal
+            read_frequency = 5383,                                      # frequency used to downconvert the signal
             magnet_inst = magnet_instance,                              # instance of the magnet control class, technical purposes   
             magnet_current = -3.0,                                      # current to set the magnet to, in Amperes
             LO_inst = LO_instance,                                      # instance of the local oscillator control class, technical purposes
             LO_frequency = 5.263,                                       # local oscillator frequency in GHz
-            LO_power = 17.0,                                            # local oscillator power in dBm
+            LO_power = 0.0,                                            # local oscillator power in dBm
             number_of_experiments = 300,                                # total number of experiments
             max_batch_size = 1000,                                      # maximum number of experiments in one batch (in one go)
             use_batch_average = False,                                  # whether to average batches of experiments or not
             note = "decimated test second case: upconverting outside the board, rf amp, downconverting to 120 outside, IF amplifier"                              # notes for the experiment, labeling purposes
         )
-    except Exception as e:
-        print(f"An error occurred: {e}")
     finally:
         RampMagnetCurrent(magnet_instance, 0.0)  # double check that the magnet is turned off
 
