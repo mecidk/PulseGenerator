@@ -22,10 +22,10 @@ def PlotReadout(read, time_row, filename, no_of_experiments, channel):
     plt.tight_layout()
 
     if channel == 0:
-        plt.title(f"Magnitude, Grand Averaged over {no_of_experiments} experiments, Channel 0")
+        plt.title(f"Magnitude, Grand Average of {no_of_experiments} Experiments, Channel 0")
         plt.savefig("data/plot_" + filename + "_ch0.png", dpi=300, bbox_inches='tight')
     else:
-        plt.title(f"Magnitude, Grand Averaged over {no_of_experiments} experiments, Channel 1")
+        plt.title(f"Magnitude, Grand Average of {no_of_experiments} Experiments, Channel 1")
         plt.savefig("data/plot_" + filename + "_ch1.png", dpi=300, bbox_inches='tight')
 
     plt.close()
@@ -46,10 +46,10 @@ def PlotPSD(data, filename, fs, no_of_experiments, channel):
 
     # this is just for naming the files properly, total average or batch average
     if channel == 0:
-        plt.title(f"PSD, Averaged over {no_of_experiments} experiments, Channel 0")
+        plt.title(f"PSD, Grand Average of {no_of_experiments} Experiments, Channel 0")
         plt.savefig("data/PSD_" + filename + "_ch0.png", dpi=300, bbox_inches='tight')
     else:
-        plt.title(f"PSD, Averaged over {no_of_experiments} experiments, Channel 1")
+        plt.title(f"PSD, Grand Average of {no_of_experiments} Experiments, Channel 1")
         plt.savefig("data/PSD_" + filename + "_ch1.png", dpi=300, bbox_inches='tight')
 
     plt.close()
@@ -63,7 +63,7 @@ def CalculateSNR(signal):
     dividing it by the standard deviation of the noise region.
     """
 
-    pulse_region = signal[72:90]
+    pulse_region = signal[120:160]
     signal_amplitude = np.max(pulse_region) - np.min(pulse_region)
 
     noise_region = signal[250:]
@@ -84,9 +84,9 @@ def StartTXTFile(filename, timestamp, sample, payload, number_of_experiments, ma
         file.write(f"# Date and Time: {timestamp} #\n")
         file.write(f"# Sample: {sample} #\n")
         file.write(f"# Channel {signal_type[2]} {'In-phase' if signal_type[-1] == 'I' else 'Quadrature'} #\n")
-        file.write(f"# Downconverting Frequency: {read_freq} MHz #\n")
         file.write(f"# Pulse Type: {payload['type']} #\n")
         file.write(f"# Pulse Frequency and Width: {payload['freq']} MHz, {payload['width'] * 4} ns #\n")
+        file.write(f"# Downconverting Frequency: {read_freq} MHz #\n")
 
         if index in [0, 1]:  # only for channel 0 and 1
             file.write(f"# LO Frequency and Power: {LO_frequency} GHz, {LO_power} dBm #\n")
@@ -478,10 +478,10 @@ def main(timestamp, sample, pulse_type = "gaussian", pulse_frequency = 120, puls
         grand_average_ch1_I = np.mean(all_batches_data_ch1_I, axis=0)[0]
         grand_average_ch1_Q = np.mean(all_batches_data_ch1_Q, axis=0)[0]
     else:
-        grand_average_ch0_I = np.mean(all_batches_data_ch0_I[0], axis=0)
-        grand_average_ch0_Q = np.mean(all_batches_data_ch0_Q[0], axis=0)
-        grand_average_ch1_I = np.mean(all_batches_data_ch1_I[0], axis=0)
-        grand_average_ch1_Q = np.mean(all_batches_data_ch1_Q[0], axis=0)
+        grand_average_ch0_I = np.mean(np.mean(all_batches_data_ch0_I, axis=0), axis=0)
+        grand_average_ch0_Q = np.mean(np.mean(all_batches_data_ch0_Q, axis=0), axis=0)
+        grand_average_ch1_I = np.mean(np.mean(all_batches_data_ch1_I, axis=0), axis=0)
+        grand_average_ch1_Q = np.mean(np.mean(all_batches_data_ch1_Q, axis=0), axis=0)
 
     # append the final average data and the time row to the .txt file
     AppendToTXTFile(filename, data_type = "array", data = np.array([grand_average_ch0_I[np.newaxis, :], grand_average_ch0_Q[np.newaxis, :],
@@ -520,31 +520,34 @@ if __name__ == "__main__":
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S") # get the current timestamp in the format YYYYMMDD_HHMMSS
 
-    main(
-        timestamp = timestamp,                                      # current time, labeling purposes
-        sample = "2024-Feb-Argn-YIG-2_5b-b1",                       # sample name, labeling purposes
-        pulse_type = "flat_top",                                    # type of the pulse, can be "gaussian", "flat_top" or "const"
-        pulse_frequency = 120,                                      # pulse frequency in MHz, same for both DACs
-        pulse_width = 10,                                           # pulse width in "weird" units, see the comments in the main function
-        read_frequency = 120,                                      # frequency used to downconvert the signal
-        magnet_inst = magnet_instance,                              # instance of the magnet control class, technical purposes   
-        magnet_current = -3.0,                                      # current to set the magnet to, in Amperes
-        LO_inst = LO_instance,                                      # instance of the local oscillator control class, technical purposes
-        LO_frequency = 5.263,                                       # local oscillator frequency in GHz
-        LO_power = 17.0,                                            # local oscillator power in dBm
-        number_of_experiments = 300,                                # total number of experiments
-        max_batch_size = 1000,                                      # maximum number of experiments in one batch (in one go)
-        use_batch_average = False,                                  # whether to average batches of experiments or not
-        note = "decimated test second case: upconverting outside the board, rf amp, downconverting to 120 outside, IF amplifier"                              # notes for the experiment, labeling purposes
-    )
+    try:
+        main(
+            timestamp = timestamp,                                      # current time, labeling purposes
+            sample = "2024-Feb-Argn-YIG-2_5b-b1",                       # sample name, labeling purposes
+            pulse_type = "flat_top",                                    # type of the pulse, can be "gaussian", "flat_top" or "const"
+            pulse_frequency = 120,                                      # pulse frequency in MHz, same for both DACs
+            pulse_width = 10,                                           # pulse width in "weird" units, see the comments in the main function
+            read_frequency = 120,                                      # frequency used to downconvert the signal
+            magnet_inst = magnet_instance,                              # instance of the magnet control class, technical purposes   
+            magnet_current = -3.0,                                      # current to set the magnet to, in Amperes
+            LO_inst = LO_instance,                                      # instance of the local oscillator control class, technical purposes
+            LO_frequency = 5.263,                                       # local oscillator frequency in GHz
+            LO_power = 17.0,                                            # local oscillator power in dBm
+            number_of_experiments = 300,                                # total number of experiments
+            max_batch_size = 1000,                                      # maximum number of experiments in one batch (in one go)
+            use_batch_average = False,                                  # whether to average batches of experiments or not
+            note = "decimated test second case: upconverting outside the board, rf amp, downconverting to 120 outside, IF amplifier"                              # notes for the experiment, labeling purposes
+        )
+    except Exception as e:
+        print(f"An error occurred: {e}")
+    finally:
+        RampMagnetCurrent(magnet_instance, 0.0)  # double check that the magnet is turned off
 
-    RampMagnetCurrent(magnet_instance, 0.0)  # double check that the magnet is turned off
+        TurnOffLO(LO_instance)  # double check that the local oscillator is turned off
 
-    TurnOffLO(LO_instance)  # double check that the local oscillator is turned off
+        if isinstance(LO_instance, SC5511A):
+            LO_instance.close_device() # close the connection to the SC5511A device, this is needed since it is NOT a VISA device
+            print("LO connection closed")
 
-    if isinstance(LO_instance, SC5511A):
-        LO_instance.close_device() # close the connection to the SC5511A device, this is needed since it is NOT a VISA device
-        print("LO connection closed")
-
-    endd = time.time()
-    print(f"took {endd - startt} seconds")
+        endd = time.time()
+        print(f"took {endd - startt} seconds")

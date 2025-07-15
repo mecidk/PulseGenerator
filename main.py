@@ -8,7 +8,7 @@ from magnet_lib import Kepco
 from sc5511a_lib import SC5511A
 from bnc855b_lib import signalGenerator855B
 
-def PlotReadout(read, time_row, filename, no_of_experiments, batch_number):
+def PlotReadout(read, time_row, filename, no_of_experiments, channel):
     
     """
     This function plots the response. It takes the response array, which is just (raw values, time) stack
@@ -21,18 +21,18 @@ def PlotReadout(read, time_row, filename, no_of_experiments, batch_number):
     plt.ylabel("a.u.")
     plt.tight_layout()
 
-    # this is just for naming the files properly, total average or batch average
-    if batch_number == 9999:
-        plt.title(f"Readout, Averaged over {no_of_experiments} experiments, Grand Average")
+    # this is just for naming the files properly
+    if channel == 0:
+        plt.title(f"Readout, Grand Average of {no_of_experiments} Experiments, Channel 0")
         plt.savefig("data/plot_" + filename + ".png", dpi=300, bbox_inches='tight')
     else:
-        plt.title(f"Readout, Averaged over {no_of_experiments} experiments, Batch {batch_number}")
-        plt.savefig("data/plot_" + filename + f"_Batch_{batch_number}.png", dpi=300, bbox_inches='tight')
+        plt.title(f"Readout, Grand Average of {no_of_experiments} Experiments, Channel 1")
+        plt.savefig("data/plot_" + filename + ".png", dpi=300, bbox_inches='tight')
 
     # plt.show()
     plt.close()
 
-def PlotPSD(data, filename, fs, no_of_experiments, batch_number):
+def PlotPSD(data, filename, fs, no_of_experiments, channel):
 
     """
     This function plots the Power Spectral Density (PSD) of the data using Welch's method.
@@ -47,13 +47,13 @@ def PlotPSD(data, filename, fs, no_of_experiments, batch_number):
     plt.tight_layout()
 
     # this is just for naming the files properly, total average or batch average
-    if batch_number == 9999:
-        plt.title(f"PSD, Averaged over {no_of_experiments} experiments, Grand Average")
+    if channel == 0:
+        plt.title(f"PSD, Grand Average of {no_of_experiments} Experiments, Channel 0")
         plt.savefig("data/PSD_" + filename + ".png", dpi=300, bbox_inches='tight')
     else:
-        plt.title(f"PSD, Averaged over {no_of_experiments} experiments, Batch {batch_number}")
-        plt.savefig("data/PSD_" + filename + f"_Batch_{batch_number}.png", dpi=300, bbox_inches='tight')
-    
+        plt.title(f"PSD, Grand Average of {no_of_experiments} Experiments, Channel 1")
+        plt.savefig("data/PSD_" + filename + ".png", dpi=300, bbox_inches='tight')
+
     # plt.show()
     plt.close()
 
@@ -506,7 +506,7 @@ def main(timestamp, sample, channel = 0, pulse_type = "gaussian", pulse_frequenc
     if use_batch_average:
         grand_average = np.mean(all_batches_data, axis=0)[0]
     else:
-        grand_average = np.mean(all_batches_data[0], axis=0)
+        grand_average = np.mean(np.mean(all_batches_data, axis=0), axis=0)
 
     # append the final average data and the time row to the .txt file
     AppendToTXTFile(filename, grand_average[np.newaxis, :])
@@ -541,31 +541,34 @@ if __name__ == "__main__":
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S") # get the current timestamp in the format YYYYMMDD_HHMMSS
 
-    main(
-        timestamp = timestamp,                                      # current time, labeling purposes
-        sample = "2024-Feb-Argn-YIG-2_5b-b1",                       # sample name, labeling purposes
-        channel = 0,                                                # which ADC channel to read, 0 for ADC_D (sample), 1 for ADC_C (loopback). in the loopback mode, LO and the magnet are disabled
-        pulse_type = "flat_top",                                    # type of the pulse, can be "gaussian", "flat_top" or "const"
-        pulse_frequency = 360,                                      # pulse frequency in MHz, same for both DACs
-        pulse_width = 10,                                           # pulse width in "weird" units, see the comments in the main function   
-        magnet_inst = magnet_instance,                              # instance of the magnet control class, technical purposes   
-        magnet_current = -3.0,                                      # current to set the magnet to, in Amperes
-        LO_inst = LO_instance,                                      # instance of the local oscillator control class, technical purposes
-        LO_frequency = 5.023,                                       # local oscillator frequency in GHz
-        LO_power = 17.0,                                            # local oscillator power in dBm
-        number_of_experiments = 300,                                # total number of experiments
-        max_batch_size = 1000,                                      # maximum number of experiments in one batch (in one go)
-        use_batch_average = False,                                  # whether to average batches of experiments or not
-        note = "new pulse freq test run, with amplifiers and BPF"   # notes for the experiment, labeling purposes
-    )
+    try:
+        main(
+            timestamp = timestamp,                                      # current time, labeling purposes
+            sample = "2024-Feb-Argn-YIG-2_5b-b1",                       # sample name, labeling purposes
+            channel = 0,                                                # which ADC channel to read, 0 for ADC_D (sample), 1 for ADC_C (loopback). in the loopback mode, LO and the magnet are disabled
+            pulse_type = "flat_top",                                    # type of the pulse, can be "gaussian", "flat_top" or "const"
+            pulse_frequency = 360,                                      # pulse frequency in MHz, same for both DACs
+            pulse_width = 10,                                           # pulse width in "weird" units, see the comments in the main function   
+            magnet_inst = magnet_instance,                              # instance of the magnet control class, technical purposes   
+            magnet_current = -3.0,                                      # current to set the magnet to, in Amperes
+            LO_inst = LO_instance,                                      # instance of the local oscillator control class, technical purposes
+            LO_frequency = 5.023,                                       # local oscillator frequency in GHz
+            LO_power = 17.0,                                            # local oscillator power in dBm
+            number_of_experiments = 300,                                # total number of experiments
+            max_batch_size = 1000,                                      # maximum number of experiments in one batch (in one go)
+            use_batch_average = False,                                  # whether to average batches of experiments or not
+            note = "new pulse freq test run, with amplifiers and BPF"   # notes for the experiment, labeling purposes
+        )
+    except Exception as e:
+        print(f"An error occurred: {e}")
+    finally:
+        RampMagnetCurrent(magnet_instance, 0.0)  # double check that the magnet is turned off
 
-    RampMagnetCurrent(magnet_instance, 0.0)  # double check that the magnet is turned off
+        TurnOffLO(LO_instance)  # double check that the local oscillator is turned off
 
-    TurnOffLO(LO_instance)  # double check that the local oscillator is turned off
+        if isinstance(LO_instance, SC5511A):
+            LO_instance.close_device() # close the connection to the SC5511A device, this is needed since it is NOT a VISA device
+            print("LO connection closed")
 
-    if isinstance(LO_instance, SC5511A):
-        LO_instance.close_device() # close the connection to the SC5511A device, this is needed since it is NOT a VISA device
-        print("LO connection closed")
-
-    endd = time.time()
-    print(f"took {endd - startt} seconds")
+        endd = time.time()
+        print(f"took {endd - startt} seconds")
