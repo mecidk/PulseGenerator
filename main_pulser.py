@@ -126,7 +126,7 @@ class PulseSequence(AveragerProgram): # type: ignore
         self.wait_all()
         self.sync_all(self.us2cycles(self.cfg["relax_delay"]))
 
-def GeneratePulse(pulse_type = "gaussian", freq = 1000, width = 10, pulse_count = 1, trig_delay = 1, no_of_expt = 1, channel = 0):
+def GeneratePulse(pulse_type = "gaussian", freq = 1000, width = 10, amplitude = 30000, pulse_count = 1, trig_delay = 1, no_of_expt = 1, channel = 0):
     # transfer the input parameters to local variables
     q1_pulse_freq = freq 
     q1_read_freq = freq
@@ -147,8 +147,8 @@ def GeneratePulse(pulse_type = "gaussian", freq = 1000, width = 10, pulse_count 
               "length": soc.us2cycles(pi_sigma_width, gen_ch=0) * 4, # factor of 4 is since the length parameter does not work with standard deviation, but with the full width of the pulse
               "pi_sigma": soc.us2cycles(pi_sigma_width, gen_ch=0), # standard deviation of the pulse in cycles
               "readout_length": soc.us2cycles(1, ro_ch=0), # in cycles
-              "pi_gain": 30000, # in DAC units
-              "pi_2_gain": 15000,
+              "pi_gain": amplitude, # in DAC units
+              "pi_2_gain": amplitude, # in DAC units
               "q1_pulse_freq": q1_pulse_freq, # in MHz
               "q2_pulse_freq": q2_pulse_freq, # in MHz
               "q1_read_freq": q1_read_freq,
@@ -194,13 +194,24 @@ def main():
     pulse_type = data.get("type")
     pulse_frequency = data.get("freq")
     pulse_width = data.get("width") # in ns
+    pulse_amplitude = data.get("amplitude") # in DAC units
     pulse_count = data.get("pulse_count")
     trigger_delay = data.get("trigger_delay")
     number_of_expt = data.get("number_of_expt")
     channel = data.get("channel")
     
-    readout = GeneratePulse(pulse_type, pulse_frequency, pulse_width, pulse_count, trigger_delay, number_of_expt, channel) # execute the main function
-    
+    # safety checks for the input parameters
+    if pulse_type not in ["gaussian", "flat_top", "const"]:
+        pulse_type = "gaussian"
+    if pulse_frequency < 0 or pulse_frequency > 9800:
+        pulse_frequency = 100
+    if pulse_amplitude < 0 or pulse_amplitude > 32767:
+        pulse_amplitude = 30000
+    if pulse_width < 0 or pulse_width > 50:
+        pulse_width = 10
+
+    readout = GeneratePulse(pulse_type, pulse_frequency, pulse_width, pulse_amplitude, pulse_count, trigger_delay, number_of_expt, channel) # execute the main function
+
     time_row = (soc.cycles2us(np.arange(0, len(readout[0][:, 0])), ro_ch = channel) / 8)  # create the timestamps for each sample,
                                                                                     # divide by 8 is due to ADC ticks being 8
                                                                                     # times slower than the real clock cycles

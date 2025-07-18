@@ -142,6 +142,7 @@ def main():
     pulse_type = data.get("type")
     pulse_frequency = data.get("freq")
     pulse_width = data.get("width") # in ns
+    pulse_amplitude = data.get("amplitude") # in DAC units
     pulse_count = data.get("pulse_count")
     trigger_delay = data.get("trigger_delay")
     number_of_expt = data.get("number_of_expt")
@@ -153,6 +154,12 @@ def main():
         max_batch_size = 1000
     if pulse_type not in ["gaussian", "flat_top", "const"]:
         pulse_type = "gaussian"
+    if pulse_frequency < 0 or pulse_frequency > 9800:
+        pulse_frequency = 100
+    if pulse_amplitude < 0 or pulse_amplitude > 32767:
+        pulse_amplitude = 30000
+    if pulse_width < 0 or pulse_width > 50:
+        pulse_width = 10
 
     q1_pulse_freq = pulse_frequency
     q1_read_freq = read_freq
@@ -173,8 +180,8 @@ def main():
               "length": soc.us2cycles(pi_sigma_width, gen_ch=0) * 4, # factor of 4 is since the length parameter does not work with standard deviation, but with the full width of the pulse
               "pi_sigma": soc.us2cycles(pi_sigma_width, gen_ch=0), # standard deviation of the pulse in cycles
               "readout_length": soc.us2cycles(1, ro_ch=0), # in cycles
-              "pi_gain": 30000, # in DAC units
-              "pi_2_gain": 15000,
+              "pi_gain": pulse_amplitude, # in DAC units
+              "pi_2_gain": pulse_amplitude,
               "q1_pulse_freq": q1_pulse_freq, # in MHz
               "q2_pulse_freq": q2_pulse_freq, # in MHz
               "q1_read_freq": q1_read_freq,
