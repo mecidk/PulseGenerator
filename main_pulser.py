@@ -168,10 +168,7 @@ def GeneratePulse(pulse_type = "gaussian", freq = 1000, width = 10, pulse_count 
     config["gate_set"] = generate_2qgateset(config)
     
     # get the desired sequence of gates (pi pulses). for now, only X gates are applied.
-    sequence = []
-    for _ in range(0, pulse_count):
-        sequence.append({'Q1': 'X', 'Q2': 'X'})
-    config['gate_seq'] = sequence
+    config['gate_seq'] = [{'Q1': 'X', 'Q2': 'X'}] * pulse_count
 
     prog = PulseSequence(soccfg, config) # initiate the pulse program which does everything
     
