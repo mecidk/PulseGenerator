@@ -230,7 +230,7 @@ def main():
             ch1_Q.append(iq[1, 1].tolist())
 
         batch_result = {
-            "batch_index": i // max_batch_size + 1,
+            "batch_index": i // max_batch_size,
             "ch0_I": ch0_I,
             "ch0_Q": ch0_Q,
             "ch1_I": ch1_I,
