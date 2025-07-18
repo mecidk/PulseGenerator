@@ -203,6 +203,8 @@ def main():
     time_row = soc.cycles2us(np.arange(0, len(iq_sample[0, 0])), ro_ch=0)
 
     # do the measurement in batches to avoid memory issues
+    print("[", flush=True)
+
     for i in range(0, number_of_expt, max_batch_size):
         this_batch = min(max_batch_size, number_of_expt - i)
 
@@ -229,11 +231,16 @@ def main():
         }
 
         json.dump(batch_result, sys.stdout)
-        print("", flush=True)
+        if i + max_batch_size < number_of_expt:
+            print(",", flush=True)
+        else:
+            print("", flush=True)
 
         # clean up to avoid memory issues
         del ch0_I, ch0_Q, ch1_I, ch1_Q, iq
         gc.collect()
+
+    print("]", flush=True)
 
 if __name__ == "__main__":
     main()

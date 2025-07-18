@@ -427,77 +427,77 @@ def main(timestamp, sample, pulse_type = "gaussian", pulse_frequency = 120, puls
         print("Response body:", response.text)
         raise RuntimeError("Failed request")
     
+    buffer = ""
     expected_batch_index = 0
     total_batches = (number_of_experiments + max_batch_size - 1) // max_batch_size  # calculate the total number of batches
     
     for line in response.iter_lines(decode_unicode=True):
-        line = line.strip()
-        if not line:
-            continue
+        buffer += line
+        if line.strip().endswith("}"):
+            try:
+                batch = json.loads(buffer)
+                buffer = ""  # reset the buffer after successful parsing
 
-        try:
-            batch = json.loads(line)
+                # check if the batch is the expected one
+                index = batch.get("index")
+                if index is None:
+                    raise ValueError("Batch index is missing in the response")
+                if index != expected_batch_index:
+                    raise ValueError(f"Unexpected batch index: {index}, expected: {expected_batch_index}")
+                expected_batch_index += 1
 
-            # check if the batch is the expected one
-            index = batch.get("batch_index")
-            if index is None:
-                raise ValueError("Batch index is missing in the response")
-            if index != expected_batch_index:
-                raise ValueError(f"Unexpected batch index: {index}, expected: {expected_batch_index}")
-            expected_batch_index += 1
+                # extract the data from the batch
+                ch0_I = np.array(batch["ch0_I"])
+                ch0_Q = np.array(batch["ch0_Q"])
+                ch1_I = np.array(batch["ch1_I"])
+                ch1_Q = np.array(batch["ch1_Q"])
 
-            # extract the data from the batch
-            ch0_I = np.array(batch["ch0_I"])
-            ch0_Q = np.array(batch["ch0_Q"])
-            ch1_I = np.array(batch["ch1_I"])
-            ch1_Q = np.array(batch["ch1_Q"])
+                is_last_batch = (index == total_batches - 1)
+                if is_last_batch and (number_of_experiments % max_batch_size != 0):
+                    expected_length = number_of_experiments % max_batch_size
+                else:
+                    expected_length = max_batch_size
 
-            is_last_batch = (index == total_batches - 1)
-            if is_last_batch and (number_of_experiments % max_batch_size != 0):
-                expected_length = number_of_experiments % max_batch_size
-            else:
-                expected_length = max_batch_size
+                if ch0_I.shape[0] != expected_length or ch0_Q.shape[0] != expected_length or ch1_I.shape[0] != expected_length or ch1_Q.shape[0] != expected_length:
+                    raise ValueError(f"Batch {index} has unexpected length: ch0_I: {ch0_I.shape[0]}, ch0_Q: {ch0_Q.shape[0]}, ch1_I: {ch1_I.shape[0]}, ch1_Q: {ch1_Q.shape[0]}. Expected length: {expected_length}")
+                
+                if batch.get("time_row") is not None:
+                    time_row = np.array(batch["time_row"]) * 1e3 # convert time row to ns
 
-            if ch0_I.shape[0] != expected_length or ch0_Q.shape[0] != expected_length or ch1_I.shape[0] != expected_length or ch1_Q.shape[0] != expected_length:
-                raise ValueError(f"Batch {index} has unexpected length: ch0_I: {ch0_I.shape[0]}, ch0_Q: {ch0_Q.shape[0]}, ch1_I: {ch1_I.shape[0]}, ch1_Q: {ch1_Q.shape[0]}. Expected length: {expected_length}")
-            
-            if batch.get("time_row") is not None:
-                time_row = np.array(batch["time_row"]) * 1e3 # convert time row to ns
+                print(f"Batch {expected_batch_index + 1} acquired successfully.")
 
-            print(f"Batch {expected_batch_index + 1} acquired successfully.")
+                if use_batch_average:
+                    # if we are using batch averaging, we take the average of the data part
+                    avg_data_ch0_I = np.mean(ch0_I, axis=0)
+                    avg_data_ch0_Q = np.mean(ch0_Q, axis=0)
+                    avg_data_ch1_I = np.mean(ch1_I, axis=0)
+                    avg_data_ch1_Q = np.mean(ch1_Q, axis=0)
 
-            if use_batch_average:
-                # if we are using batch averaging, we take the average of the data part
-                avg_data_ch0_I = np.mean(ch0_I, axis=0)
-                avg_data_ch0_Q = np.mean(ch0_Q, axis=0)
-                avg_data_ch1_I = np.mean(ch1_I, axis=0)
-                avg_data_ch1_Q = np.mean(ch1_Q, axis=0)
+                    all_batches_data_ch0_I.append(avg_data_ch0_I[np.newaxis, :])
+                    all_batches_data_ch0_Q.append(avg_data_ch0_Q[np.newaxis, :])
+                    all_batches_data_ch1_I.append(avg_data_ch1_I[np.newaxis, :])
+                    all_batches_data_ch1_Q.append(avg_data_ch1_Q[np.newaxis, :])
 
-                all_batches_data_ch0_I.append(avg_data_ch0_I[np.newaxis, :])
-                all_batches_data_ch0_Q.append(avg_data_ch0_Q[np.newaxis, :])
-                all_batches_data_ch1_I.append(avg_data_ch1_I[np.newaxis, :])
-                all_batches_data_ch1_Q.append(avg_data_ch1_Q[np.newaxis, :])
+                    AppendToTXTFile(filename, data_type = "array", data = np.array([avg_data_ch0_I[np.newaxis, :], avg_data_ch0_Q[np.newaxis, :], avg_data_ch1_I[np.newaxis, :], avg_data_ch1_Q[np.newaxis, :]]))
+                else:
+                    # if we are not using batch averaging, we append the whole data part to the all_batches_data
+                    all_batches_data_ch0_I.extend(ch0_I)
+                    all_batches_data_ch0_Q.extend(ch0_Q)
+                    all_batches_data_ch1_I.extend(ch1_I)
+                    all_batches_data_ch1_Q.extend(ch1_Q)
 
-                AppendToTXTFile(filename, data_type = "array", data = np.array([avg_data_ch0_I[np.newaxis, :], avg_data_ch0_Q[np.newaxis, :], avg_data_ch1_I[np.newaxis, :], avg_data_ch1_Q[np.newaxis, :]]))
-            else:
-                # if we are not using batch averaging, we append the whole data part to the all_batches_data
-                all_batches_data_ch0_I.extend(ch0_I)
-                all_batches_data_ch0_Q.extend(ch0_Q)
-                all_batches_data_ch1_I.extend(ch1_I)
-                all_batches_data_ch1_Q.extend(ch1_Q)
+                    AppendToTXTFile(filename, data_type = "array", data = np.array([ch0_I, ch0_Q, ch1_I, ch1_Q]))
 
-                AppendToTXTFile(filename, data_type = "array", data = np.array([ch0_I, ch0_Q, ch1_I, ch1_Q]))
+                print(f"Batch {expected_batch_index + 1} processed successfully")
+                time.sleep(0.5)  # wait for a bit to avoid overwhelming the server
 
-            print(f"Batch {expected_batch_index + 1} processed successfully")
-            time.sleep(0.5)  # wait for a bit to avoid overwhelming the server
+            except json.JSONDecodeError:
+                print(f"Error decoding JSON for batch {expected_batch_index}: {buffer}")
+                continue
 
-        except json.JSONDecodeError:
-            print("Error decoding JSON")
-            continue
-
-        except Exception as e:
-            print(f"Error processing line {line}: {e}")
-            break
+            except Exception as e:
+                print(f"Error processing batch {expected_batch_index}: {e}")
+                break
 
     all_batches_data_ch0_I = np.array(all_batches_data_ch0_I)
     all_batches_data_ch0_Q = np.array(all_batches_data_ch0_Q)
