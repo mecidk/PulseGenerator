@@ -3,6 +3,7 @@
 import sys
 import json
 import gc
+import time
 
 from qick import * # type: ignore
 from qick_training import * # type: ignore
@@ -231,14 +232,12 @@ def main():
         }
 
         json.dump(batch_result, sys.stdout)
-        if i + max_batch_size < number_of_expt:
-            print(",", flush=True)
-        else:
-            print("", flush=True)
+        print("", flush=True)
 
         # clean up to avoid memory issues
         del ch0_I, ch0_Q, ch1_I, ch1_Q, iq
         gc.collect()
+        time.sleep(0.1)
 
     print("]", flush=True)
 

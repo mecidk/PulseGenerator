@@ -123,11 +123,11 @@ def AppendToTXTFile(filename, data_type, data):
 
         if data_type == "array":
             file = open("data/data_" + filename + f"_{signal_type}.txt", "a")
-            np.savetxt(file, data[index], fmt = "%.18e", delimiter = ",")
+            np.savetxt(file, data[index], fmt = "%.6e", delimiter = ",")
             file.close()
         elif data_type == "time":
             file = open("data/data_" + filename + f"_{signal_type}.txt", "a")
-            np.savetxt(file, data, fmt = "%.18e", delimiter = ",")
+            np.savetxt(file, data, fmt = "%.6e", delimiter = ",")
             file.close()
         else:
             raise ValueError("data_type must be 'array' or 'time'")

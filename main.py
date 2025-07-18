@@ -89,7 +89,8 @@ def StartTXTFile(filename, timestamp, sample, channel, payload, number_of_experi
     file.write("# Channel: 0, sample #\n" if channel == 0 else "# Channel: 1, loopback #\n")
     file.write(f"# Pulse Type: {payload['type']} #\n")
     file.write(f"# Pulse Frequency and Width: {payload['freq']} MHz, {payload['width'] * 4} ns #\n")
-
+    file.write(f"# Pulse Amplitude: {payload['amplitude']} a.u. #\n")
+    
     if channel == 0:
         file.write(f"# LO Frequency and Power: {LO_frequency} GHz, {LO_power} dBm #\n")
         file.write(f"# Magnet Current: {magnet_current} A #\n")
@@ -345,8 +346,10 @@ def GetLOStatus(instance):
 
     return temperature, rf_params, device_status
 
-def main(timestamp, sample, channel = 0, pulse_type = "gaussian", pulse_frequency = 120, pulse_width = 15, magnet_inst = None, magnet_current = 0.0, LO_inst = None, LO_frequency = 5.0, LO_power = 0.0, number_of_experiments = 1000, max_batch_size = 1000, use_batch_average = True,  note = ""):
-    
+def main(timestamp, sample, channel = 0, pulse_type = "gaussian", pulse_frequency = 120, pulse_width = 15, 
+         pulse_amplitude = 30000, magnet_inst = None, magnet_current = 0.0, LO_inst = None, LO_frequency = 5.0, 
+         LO_power = 0.0, number_of_experiments = 1000, max_batch_size = 1000, use_batch_average = True,  note = ""):
+
     """
     This main function sends a request to the Flask (a type of web server)
     server running on the board itself. Some parameters of the pulse is passed 
@@ -358,6 +361,9 @@ def main(timestamp, sample, channel = 0, pulse_type = "gaussian", pulse_frequenc
     # raise an error if the max_batch_size is greater than 1000 to avoid memory issues on the board
     if max_batch_size > 1000:
         raise ValueError("max_batch_size cannot be greater than 1000 due to memory limitations of the board")
+    
+    if pulse_amplitude < 0 or pulse_amplitude > 32768:
+        raise ValueError("Pulse amplitude must be between 0 and 32768")
     
     # raise an error if the pulse type is not 'gaussian' or 'flat_top'
     if pulse_type not in ["gaussian", "flat_top", "const"]:
@@ -387,19 +393,20 @@ def main(timestamp, sample, channel = 0, pulse_type = "gaussian", pulse_frequenc
     # specify the parameters of the pulses in this payload to be sent over the internet to the board
     payload = {
         'mode': 'raw',
-        'type': pulse_type,         # type of the pulse, can be 'gaussian' or 'flat_top'
-        'freq': pulse_frequency,    # underlying frequency, same for both DACs.
-        'width': pulse_width,       # this parameter is weird due to QICK problems
-                                    # width = 100 -> real pulse width = 393.43ns
-                                    # width = 50 -> real pulse width = 199.93ns
-                                    # width = 10 -> real pulse width = 49.83ns
-        'pulse_count': 1,           # number of pulses to be generated back to back in one experiment
-        'trigger_delay': 1,         # delay amount of the triggering of the ADC buffer, essentially when to "press record", in us
-                                    # trigger_delay = 1 -> first pulse around t = 50ns
-        'number_of_expt': 1,        # how many experiments to be done, just a placeholder, will be set later
-        'channel': channel          # which ADC channel to read, both of the DAC channels are generating the signal simultaneously
-                                    # channel 0 -> ADC_D, channel 1 -> ADC_C
-                                    # in our configuration, channel 0 is connected to the sample and channel 1 is in loopback
+        'type': pulse_type,                                 # type of the pulse, can be 'gaussian' or 'flat_top'
+        'freq': pulse_frequency,                            # underlying frequency, same for both DACs.
+        'width': pulse_width,                               # this parameter is weird due to QICK problems
+                                                            # width = 100 -> real pulse width = 393.43ns
+                                                            # width = 50 -> real pulse width = 199.93ns
+                                                            # width = 10 -> real pulse width = 49.83ns
+        'amplitude': pulse_amplitude,                       # amplitude of the pulse, in DAC units (a.u.) (0-32768)
+        'pulse_count': 1,                                   # number of pulses to be generated back to back in one experiment
+        'trigger_delay': 1,                                 # delay amount of the triggering of the ADC buffer, essentially when to "press record", in us
+                                                            # trigger_delay = 1 -> first pulse around t = 50ns
+        'number_of_expt': 1,                                # how many experiments to be done, just a placeholder, will be set later
+        'channel': channel                                  # which ADC channel to read, both of the DAC channels are generating the signal simultaneously
+                                                            # channel 0 -> ADC_D, channel 1 -> ADC_C
+                                                            # in our configuration, channel 0 is connected to the sample and channel 1 is in loopback
     }
 
     # define the notch filter coefficients, this is only done once since the filter coefficients are the same for all experiments
@@ -549,14 +556,15 @@ if __name__ == "__main__":
             sample = "2024-Feb-Argn-YIG-2_5b-b1",                       # sample name, labeling purposes
             channel = 0,                                                # which ADC channel to read, 0 for ADC_D (sample), 1 for ADC_C (loopback). in the loopback mode, LO and the magnet are disabled
             pulse_type = "flat_top",                                    # type of the pulse, can be "gaussian", "flat_top" or "const"
-            pulse_frequency = 360,                                      # pulse frequency in MHz, same for both DACs
-            pulse_width = 10,                                           # pulse width in "weird" units, see the comments in the main function   
+            pulse_frequency = 120,                                      # pulse frequency in MHz, same for both DACs
+            pulse_width = 10,                                           # pulse width in "weird" units, see the comments in the main function  
+            pulse_amplitude = 30000,                                    # pulse amplitude in DAC units, 30000 is the maximum amplitude 
             magnet_inst = magnet_instance,                              # instance of the magnet control class, technical purposes   
             magnet_current = -3.0,                                      # current to set the magnet to, in Amperes
             LO_inst = LO_instance,                                      # instance of the local oscillator control class, technical purposes
-            LO_frequency = 5.023,                                       # local oscillator frequency in GHz
+            LO_frequency = 5.263,                                       # local oscillator frequency in GHz
             LO_power = 17.0,                                            # local oscillator power in dBm
-            number_of_experiments = 300,                                # total number of experiments
+            number_of_experiments = 1000,                                # total number of experiments
             max_batch_size = 1000,                                      # maximum number of experiments in one batch (in one go)
             use_batch_average = False,                                  # whether to average batches of experiments or not
             note = "new pulse freq test run, with amplifiers and BPF"   # notes for the experiment, labeling purposes
