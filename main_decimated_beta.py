@@ -7,7 +7,7 @@ import time
 import json
 from magnet_lib import Kepco
 from sc5511a_lib import SC5511A
-from bnc855b_lib import signalGenerator855B
+from bnc_lib import SignalGenerator855B
 
 def PlotReadout(read, time_row, filename, no_of_experiments, channel):
     
@@ -187,7 +187,7 @@ def InitializeLO(LO_type = ""):
         LO_instance.set_rf2_standby(1) # turn on the standby mode of RF2
         print("Local Oscillator initialized")
     elif LO_type == "BNC855B":
-        LO_instance = signalGenerator855B()
+        LO_instance = SignalGenerator855B()
         LO_instance.outPutOff(1)  # turn off the output for safety
         LO_instance.outPutOff(2)  # turn off the output for safety
         print("BNC 855B Local Oscillator initialized")
@@ -218,7 +218,7 @@ def TurnOnLO(instance, freq = 1.0, power = 0.0):
         instance.set_standby(0) # turn off the standby mode
         instance.set_output(True)  # turn on the RF output
         print("LO output is ON")
-    elif isinstance(instance, signalGenerator855B):
+    elif isinstance(instance, SignalGenerator855B):
         for channel in [1, 2]:
             if (freq <= 0.0003 or freq >= 40.0):
                 raise ValueError("Frequency must be between 300 kHz and 40 GHz")
@@ -233,7 +233,7 @@ def TurnOnLO(instance, freq = 1.0, power = 0.0):
             instance.outPutOn(channel)  # turn on the output of channel 1
             print(f"BNC LO channel {channel} output is ON")
     else:
-        raise ValueError("Unsupported LO instance. Please use an instance of SC5511A or signalGenerator855B")
+        raise ValueError("Unsupported LO instance. Please use an instance of SC5511A or SignalGenerator855B")
 
 def TurnOffLO(instance):
     """
@@ -251,7 +251,7 @@ def TurnOffLO(instance):
         else:
             print("Failed to turn off LO output, trying again...")
             TurnOffLO(instance)
-    elif isinstance(instance, signalGenerator855B):
+    elif isinstance(instance, SignalGenerator855B):
 
         for channel in [1, 2]:
             instance.outPutOff(channel)  # turn off the output of channel 1
@@ -262,14 +262,14 @@ def TurnOffLO(instance):
             print("Failed to turn off LO output, trying again...")
             TurnOffLO(instance)
     else:
-        raise ValueError("Unsupported LO instance. Please use an instance of SC5511A or signalGenerator855B")
-    
+        raise ValueError("Unsupported LO instance. Please use an instance of SC5511A or SignalGenerator855B")
+
 def GetLOStatus(instance):
 
     """
     This function retrieves the status of the local oscillator (LO).
     It returns the temperature, RF parameters, and device status.
-    Temperature is only available for SC5511A, so it will be 0 for signalGenerator855B.
+    Temperature is only available for SC5511A, so it will be 0 for SignalGenerator855B.
 
     """
 
@@ -290,7 +290,7 @@ def GetLOStatus(instance):
             'rf2_standby': instance.get_device_status().operate_status.rf2_standby,
             'rf2_out_enable': True  # SC5511A does not have extra RF2 control, it is always enabled if not in standby
         }
-    elif isinstance(instance, signalGenerator855B):
+    elif isinstance(instance, SignalGenerator855B):
 
         temperature = 0 # BNC 855B does not provide temperature information
 
@@ -308,7 +308,7 @@ def GetLOStatus(instance):
             'rf2_out_enable': instance.outPutQuery(2)
         }
     else:
-        raise ValueError("Unsupported LO instance. Please use an instance of SC5511A or signalGenerator855B")
+        raise ValueError("Unsupported LO instance. Please use an instance of SC5511A or SignalGenerator855B")
 
     return temperature, rf_params, device_status
 

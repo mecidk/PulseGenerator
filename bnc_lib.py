@@ -3,7 +3,7 @@
 Created on Fri Oct 28 12:25:46 2022
 
 @author: Jonathan Gibbons
-@editor: Tzu-Hsiang Lo, Jinho Lim
+@editor: Tzu-Hsiang Lo, Jinho Lim, Mecid Kocyigit
 """
 
 import pyvisa # type: ignore
@@ -11,7 +11,7 @@ from pyvisa.constants import StopBits, Parity # type: ignore
 import numpy
 import time
 
-class signalGenerator865:
+class SignalGenerator865:
     def __init__(self):
         self.rm = pyvisa.ResourceManager()
         self.sigGen = self.rm.open_resource('USB0::0x03EB::0xAFFF::4F1-3B4E00014-1587::INSTR')
@@ -27,23 +27,29 @@ class signalGenerator865:
         self.sigGen.write("SOURce:AM:SOURce EXTernal")
         self.sigGen.write("SOURce:AM:STATe ON")
         
+    def amplModOn(self): # page 46
+        self.sigGen.write("SOURce:AM:STATe ON")
+        
+    def amplModOff(self): # page 46
+        self.sigGen.write("SOURce:AM:STATe OFF")
+
     def power(self,power): # page 29
         self.sigGen.write("SOURce:POWer:AMPLitude " + str(power))
         
-    def outputon(self):
-        self.sigGen.write(":OUTPut" + str(1) + ":STATe ON")
-        print('output is: ' + self.sigGen.query(":OUTPut" + str(1) + ":STATe?"))
-
-    def outputoff(self):
-        self.sigGen.write(":OUTPut" + str(1) + ":STATe OFF")
-        print('output is: ' + self.sigGen.query(":OUTPut" + str(1) + ":STATe?"))
-              
+    def outPutOn(self):
+        self.sigGen.write(":OUTPut" + ":STATe ON")
+        print('output is: ' + self.sigGen.query(":OUTPut" + ":STATe?"))
+    
+    def outPutOff(self):
+        self.sigGen.write(":OUTPut" + ":STATe OFF")
+        print('output is: ' + self.sigGen.query(":OUTPut" + ":STATe?"))
+        
     def freq(self,freqval=10): # page 29
         freqapp = freqval*1000000000 # in GHz
         self.sigGen.write('SOURce:FREQuency:CW ' + str(freqapp))
     
         
-class signalGenerator855B:
+class SignalGenerator855B:
     def __init__(self):
         self.rm = pyvisa.ResourceManager()
         self.sigGen = self.rm.open_resource('USB0::0x03EB::0xAFFF::6E5-0B4L20014-0981::INSTR')
@@ -109,3 +115,35 @@ class signalGenerator855B:
         output_state = self.sigGen.query(":OUTPut" + str(ch) + ":STATe?")
         # print(output_state)
         return float(output_state)
+    
+class SignalGenerator845:
+    def __init__(self):
+        self.rm = pyvisa.ResourceManager()
+        self.sigGen = self.rm.open_resource('USB0::0x03EB::0xAFFF::421-43A6D0610-1452::INSTR')
+        self.sigGen.read_termination = '\n'
+        self.sigGen.write_termination = '\n'
+        print(self.rm.list_resources())
+        
+    def query(self):
+        print(self.sigGen.query('*IDN?'))
+           
+    def amplMod(self,depth): # page 46
+        self.sigGen.write("SOURce:AM:DEPTh " + str(depth))
+        self.sigGen.write("SOURce:AM:SOURce EXTernal")
+        self.sigGen.write("SOURce:AM:STATe ON")
+        
+    def power(self,power): # page 29
+        self.sigGen.write("SOURce:POWer:AMPLitude " + str(power))
+        
+       
+    def freq(self,freqval=10): # page 29
+        freqapp = freqval*1000000000 # in GHz
+        self.sigGen.write('SOURce:FREQuency:CW ' + str(freqapp))
+        
+    def outPutOn(self):
+        self.sigGen.write(":OUTPut" + ":STATe ON")
+        print('output is: ' + self.sigGen.query(":OUTPut" + ":STATe?"))
+        
+    def outPutOff(self):
+        self.sigGen.write(":OUTPut" + ":STATe OFF")
+        print('output is: ' + self.sigGen.query(":OUTPut" + ":STATe?"))
