@@ -2,7 +2,7 @@ import requests
 from datetime import datetime
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.signal import welch
+from scipy.signal import iirnotch, filtfilt, welch
 import time
 from kepco_lib import Kepco
 from sc5511a_lib import SC5511A
@@ -21,13 +21,15 @@ def PlotReadout(read, time_row, filename, no_of_experiments, channel):
     plt.ylabel("a.u.")
     plt.tight_layout()
 
+    # this is just for naming the files properly
     if channel == 0:
-        plt.title(f"Magnitude, Grand Average of {no_of_experiments} Experiments, Channel 0")
-        plt.savefig("data/plot_" + filename + "_ch0.png", dpi=300, bbox_inches='tight')
+        plt.title(f"Readout, Grand Average of {no_of_experiments} Experiments, Channel 0")
+        plt.savefig("data/plot_" + filename + ".png", dpi=300, bbox_inches='tight')
     else:
-        plt.title(f"Magnitude, Grand Average of {no_of_experiments} Experiments, Channel 1")
-        plt.savefig("data/plot_" + filename + "_ch1.png", dpi=300, bbox_inches='tight')
+        plt.title(f"Readout, Grand Average of {no_of_experiments} Experiments, Channel 1")
+        plt.savefig("data/plot_" + filename + ".png", dpi=300, bbox_inches='tight')
 
+    # plt.show()
     plt.close()
 
 def PlotPSD(data, filename, fs, no_of_experiments, channel):
@@ -47,11 +49,12 @@ def PlotPSD(data, filename, fs, no_of_experiments, channel):
     # this is just for naming the files properly, total average or batch average
     if channel == 0:
         plt.title(f"PSD, Grand Average of {no_of_experiments} Experiments, Channel 0")
-        plt.savefig("data/PSD_" + filename + "_ch0.png", dpi=300, bbox_inches='tight')
+        plt.savefig("data/PSD_" + filename + ".png", dpi=300, bbox_inches='tight')
     else:
         plt.title(f"PSD, Grand Average of {no_of_experiments} Experiments, Channel 1")
-        plt.savefig("data/PSD_" + filename + "_ch1.png", dpi=300, bbox_inches='tight')
+        plt.savefig("data/PSD_" + filename + ".png", dpi=300, bbox_inches='tight')
 
+    # plt.show()
     plt.close()
 
 def CalculateSNR(signal):
@@ -63,10 +66,10 @@ def CalculateSNR(signal):
     dividing it by the standard deviation of the noise region.
     """
 
-    pulse_region = signal[115:160]
+    pulse_region = signal[950:1390]
     signal_amplitude = np.max(pulse_region) - np.min(pulse_region)
 
-    noise_region = signal[250:]
+    noise_region = signal[1540:]
     noise_amplitude = np.std(noise_region)
 
     snr = signal_amplitude / noise_amplitude
@@ -74,63 +77,96 @@ def CalculateSNR(signal):
 
     return snr, snr_dB
 
-def StartTXTFile(filename, timestamp, sample, payload, number_of_experiments, max_batch_size, use_batch_average, magnet_current, LO_frequency,  LO_power, read_freq, note):
+def StartTXTFile(filename, timestamp, sample, channel, payload, number_of_experiments, max_batch_size, use_batch_average, magnet_current, LO_frequency,  LO_power, note):
     
     """
-    This function initiates .txt files with a headers containing metadata about the experiment.
+    This function initiates a .txt file with a header containing metadata about the experiment.
     """
-    for index, signal_type in enumerate(["ch0_I", "ch0_Q", "ch1_I", "ch1_Q"]):
-        file = open("data/data_" + filename + f"_{signal_type}.txt", "w")
-        file.write(f"# Date and Time: {timestamp} #\n")
-        file.write(f"# Sample: {sample} #\n")
-        file.write(f"# Channel {signal_type[2]} {'In-phase' if signal_type[-1] == 'I' else 'Quadrature'} #\n")
-        file.write(f"# Pulse Type: {payload['type']} #\n")
-        file.write(f"# Pulse Frequency and Width: {payload['freq']} MHz, {payload['width'] * 4} ns #\n")
-        file.write(f"# Downconverting Frequency: {read_freq} MHz #\n")
 
-        if index in [0, 1]:  # only for channel 0 and 1
-            file.write(f"# LO Frequency and Power: {LO_frequency} GHz, {LO_power} dBm #\n")
-            file.write(f"# Magnet Current: {magnet_current} A #\n")
-        else:
-            file.write("# Loopback channel, no LO and Magnet #\n")
+    file = open("data/data_" + filename + ".txt", "w")
+    file.write(f"# Date and Time: {timestamp} #\n")
+    file.write(f"# Sample: {sample} #\n")
+    file.write("# Channel: 0, sample #\n" if channel == 0 else "# Channel: 1, loopback #\n")
+    file.write(f"# Pulse Type: {payload['type']} #\n")
+    file.write(f"# Pulse Frequency and Width: {payload['freq']} MHz, {payload['width'] * 4} ns #\n")
+    file.write(f"# Pulse Amplitude: {payload['amplitude']} a.u. #\n")
+    
+    if channel == 0:
+        file.write(f"# LO Frequency and Power: {LO_frequency} GHz, {LO_power} dBm #\n")
+        file.write(f"# Magnet Current: {magnet_current} A #\n")
+    else:
+        file.write("# LO and Magnet are disabled in loopback mode #\n")
+    
+    file.write(f"# Number of Experiments: {number_of_experiments} #\n")
+    file.write(f"# Max Batch Size: {max_batch_size} #\n")
+    file.write(f"# Is each batch averaged?: {use_batch_average} #\n")
 
-        file.write(f"# Number of Experiments: {number_of_experiments} #\n")
-        file.write(f"# Max Batch Size: {max_batch_size} #\n")
-        file.write(f"# Is each batch averaged?: {use_batch_average} #\n")
+    file.write(f"# Note: {note} #\n")
 
-        file.write(f"# Note: {note} #\n")
+    if use_batch_average:
+        file.write(f"# Data Format: Each row is a {max_batch_size}-experiment average #\n")
+    else:
+        file.write("# Data Format: Each row is an experiment #\n")
 
-        if use_batch_average:
-            file.write(f"# Data Format: Each row is a {max_batch_size}-experiment average #\n")
-        else:
-            file.write("# Data Format: Each row is an experiment #\n")
+    file.write("# The second-to-last row is the average of all rows above #\n")
+    file.write("# The last row is the time row in ns #\n")
+    file.close()
 
-        file.write("# The second-to-last row is the average of all rows above #\n")
-        file.write("# The last row is the time row in ns #\n")
-        file.close()
-
-def AppendToTXTFile(filename, data_type, data):
+def AppendToTXTFile(filename, myrow):
 
     """
     This function appends a row of data to the .txt file.
-    It takes the filename, type of data (either 'array' or 'time'), and the data itself as input.
+    It takes the filename and the row of data as input.
     """
 
-    if not isinstance(data, np.ndarray):
+    if not isinstance(myrow, np.ndarray):
         raise TypeError("Input must be a numpy array")
+    
+    # append the data to the file
+    file = open("data/data_" + filename + ".txt", "a")
+    np.savetxt(file, myrow, fmt = "%.18e", delimiter = ",")
+    file.close()
 
-    for index, signal_type in enumerate(["ch0_I", "ch0_Q", "ch1_I", "ch1_Q"]):
+def CreateNotchFilter(fs):
 
-        if data_type == "array":
-            file = open("data/data_" + filename + f"_{signal_type}.txt", "a")
-            np.savetxt(file, data[index], fmt = "%.6e", delimiter = ",")
-            file.close()
-        elif data_type == "time":
-            file = open("data/data_" + filename + f"_{signal_type}.txt", "a")
-            np.savetxt(file, data, fmt = "%.6e", delimiter = ",")
-            file.close()
-        else:
-            raise ValueError("data_type must be 'array' or 'time'")
+    """
+    This function creates a notch filter to filter out the harmonics of the fundamental frequency.
+    It takes the raw signal and the sampling frequency as input, and returns the notch filter coefficients.
+    """
+    
+    # define notch filter parameters
+    f0 = fs / 8  # fundamental frequency to filter out (in Hz)
+    harmonics = [f0 * i for i in range (1, 5)]  # harmonics to filter out (in Hz)
+
+    # add some additional harmonics that are not exact multiples of the fundamental frequency
+    harmonics.append(984.96e6)
+    harmonics.append(1.47744e9)
+    harmonics.append(1.96992e9)
+    harmonics.append(838.08e6)
+
+    Q = 30.0  # quality factor for the notch filter, adjust for narrower or wider notches
+
+    # Create notch filters for each harmonic
+    notch_filters = []
+    for f_h in harmonics:
+        w0 = f_h / (fs / 2)  # Normalized frequency (0 to 1)
+        b, a = iirnotch(w0, Q)
+        notch_filters.append((b, a))
+    
+    return notch_filters
+
+def ApplyNotchFilter(raw_signal, filter_coeff):
+
+    """
+    This function applies the notch filter to the raw signal. It takes the raw signal and the filter coefficients as input,
+    and returns the filtered signal.
+    """
+
+    filtered_signal = raw_signal.copy()
+    for b, a in filter_coeff:
+        filtered_signal = filtfilt(b, a, filtered_signal)
+    
+    return filtered_signal
 
 def InitializeMagnet(GPIB_channel = 1):
 
@@ -146,7 +182,7 @@ def InitializeMagnet(GPIB_channel = 1):
 
     return kepco_instance
 
-def RampMagnetCurrent(instance, current = 0.0):
+def RampMagnet(instance, current = 0.0):
 
     """
     This function ramps the magnet current to the desired value.
@@ -162,7 +198,7 @@ def RampMagnetCurrent(instance, current = 0.0):
     curr_read = float(instance.get_current())
     if abs(curr_read - current) > 0.001:
         print("Current read is not within the expected range. Retrying...")
-        curr_read = RampMagnetCurrent(instance, current)
+        curr_read = RampMagnet(instance, current)
 
     print(f"Current read: {curr_read} A")
     
@@ -310,8 +346,10 @@ def GetLOStatus(instance):
 
     return temperature, rf_params, device_status
 
-def main(timestamp, sample, pulse_type = "gaussian", pulse_frequency = 120, pulse_width = 15, read_frequency = 0, magnet_inst = None, magnet_current = 0.0, LO_inst = None, LO_frequency = 5.0, LO_power = 0.0, number_of_experiments = 1000, max_batch_size = 1000, use_batch_average = True,  note = ""):
-    
+def main(timestamp, sample, channel = 0, pulse_type = "gaussian", pulse_frequency = 120, pulse_width = 15, 
+         pulse_amplitude = 30000, magnet_inst = None, magnet_current = 0.0, LO_inst = None, LO_frequency = 5.0, 
+         LO_power = 0.0, number_of_experiments = 1000, max_batch_size = 1000, use_batch_average = True,  note = ""):
+
     """
     This main function sends a request to the Flask (a type of web server)
     server running on the board itself. Some parameters of the pulse is passed 
@@ -324,100 +362,116 @@ def main(timestamp, sample, pulse_type = "gaussian", pulse_frequency = 120, puls
     if max_batch_size > 1000:
         raise ValueError("max_batch_size cannot be greater than 1000 due to memory limitations of the board")
     
+    if pulse_amplitude < 0 or pulse_amplitude > 32768:
+        raise ValueError("Pulse amplitude must be between 0 and 32768")
+    
     # raise an error if the pulse type is not 'gaussian' or 'flat_top'
     if pulse_type not in ["gaussian", "flat_top", "const"]:
         raise ValueError("Only supported pulse types are 'gaussian', 'flat_top' and 'const'")
     
-    current_read = RampMagnetCurrent(magnet_inst, magnet_current)  # turn on the magnet with specified current
-    time.sleep(5)  # wait for the magnet to stabilize
-    if abs(current_read - magnet_current) > 0.001:  # check if the current is set correctly
-        raise RuntimeError("Magnet current not set correctly.")
+    if channel == 1:
+        print("Warning: Loopback ADC is selected, LO and magnet will be disabled.")
+    elif channel == 0:
+        current_read = RampMagnet(magnet_inst, magnet_current)  # turn on the magnet with specified current
+        time.sleep(5)  # wait for the magnet to stabilize
+        if abs(current_read - magnet_current) > 0.001:  # check if the current is set correctly
+            raise RuntimeError("Magnet current not set correctly.")
 
-    TurnOnLO(LO_inst, freq = LO_frequency, power = LO_power)  # turn on the local oscillator with the specified frequency and power
-    time.sleep(1)  # wait for the LO to stabilize
+        TurnOnLO(LO_inst, freq = LO_frequency, power = LO_power)  # turn on the local oscillator with the specified frequency and power
+        time.sleep(1)  # wait for the LO to stabilize
 
-    # check if the LO parameters are set correctly
-    (LO_temp, LO_rf_params, LO_status) = GetLOStatus(LO_inst)
-    if ((np.abs(LO_rf_params["rf1_freq"] - LO_frequency) > 1e-9) or (np.abs(LO_rf_params["rf1_level"] - LO_power) > 1e-3) or not LO_status["rf1_out_enable"] or LO_status["rf1_standby"]):
-        TurnOffLO(LO_inst)
-        raise RuntimeError("Local oscillator parameters are not set correctly. Please check the settings.")
-    
+        # check if the LO parameters are set correctly
+        (LO_temp, LO_rf_params, LO_status) = GetLOStatus(LO_inst)
+        if ((np.abs(LO_rf_params["rf1_freq"] - LO_frequency) > 1e-9) or (np.abs(LO_rf_params["rf1_level"] - LO_power) > 1e-3) or not LO_status["rf1_out_enable"] or LO_status["rf1_standby"]):
+            TurnOffLO(LO_inst)
+            raise RuntimeError("Local oscillator parameters are not set correctly. Please check the settings.")
+    else:
+        raise ValueError("Channel must be either 0 (ADC_D) or 1 (ADC_C)")
+
     url = 'http://128.174.248.50:5500/run' # this is the URL address that the server on the board is listening
-
+    
     # specify the parameters of the pulses in this payload to be sent over the internet to the board
     payload = {
-        'mode': 'decimated',                                # mode of the pulse, can be 'raw' or 'decimated'
+        'mode': 'raw',
         'type': pulse_type,                                 # type of the pulse, can be 'gaussian' or 'flat_top'
         'freq': pulse_frequency,                            # underlying frequency, same for both DACs.
         'width': pulse_width,                               # this parameter is weird due to QICK problems
                                                             # width = 100 -> real pulse width = 393.43ns
                                                             # width = 50 -> real pulse width = 199.93ns
                                                             # width = 10 -> real pulse width = 49.83ns
+        'amplitude': pulse_amplitude,                       # amplitude of the pulse, in DAC units (a.u.) (0-32768)
         'pulse_count': 1,                                   # number of pulses to be generated back to back in one experiment
-        'trigger_delay': 0.2,                               # delay amount of the triggering of the ADC buffer, essentially when to "press record", in us
+        'trigger_delay': 1,                                 # delay amount of the triggering of the ADC buffer, essentially when to "press record", in us
                                                             # trigger_delay = 1 -> first pulse around t = 50ns
         'number_of_expt': 1,                                # how many experiments to be done, just a placeholder, will be set later
-        'read_freq': read_frequency                         # frequency to downconvert the signal
+        'channel': channel                                  # which ADC channel to read, both of the DAC channels are generating the signal simultaneously
+                                                            # channel 0 -> ADC_D, channel 1 -> ADC_C
+                                                            # in our configuration, channel 0 is connected to the sample and channel 1 is in loopback
     }
 
-    fs = 552.96e6 # define decimated sampling frequency of the ADCs
+    # define the notch filter coefficients, this is only done once since the filter coefficients are the same for all experiments
+    fs = 4423.68e6 
+    notch_filters = CreateNotchFilter(fs)  # create the notch filter coefficients
 
-    all_batches_data_ch0_I = []  # list to store the data for channel 0 I
-    all_batches_data_ch0_Q = []  # list to store the data for channel 0 Q
-    all_batches_data_ch1_I = []  # list to store the data for channel 1 I
-    all_batches_data_ch1_Q = []  # list to store the data for channel 1 Q
+    all_batches_data = []  # this will hold the average data from all batches of experiments
 
-    filename = f"decimated_{timestamp}_Sample={sample}_Pulse={pulse_type}_{payload['freq']}MHz_AvgN={number_of_experiments}_MagnetI={magnet_current}_A"
-    
+    # define a filename to be used
+    if channel == 0:
+        filename = f"{timestamp}_Sample={sample}_Pulse={pulse_type}_{payload['freq']}MHz_AvgN={number_of_experiments}_MagnetI={magnet_current}_A"
+    else:
+        filename = f"{timestamp}_Sample={sample}_Pulse={pulse_type}_{payload['freq']}MHz_AvgN={number_of_experiments}_Loopback"
+
     # export the data to a .txt file
-    StartTXTFile(filename, timestamp, sample, payload, number_of_experiments, max_batch_size, use_batch_average, magnet_current, LO_frequency, LO_power, read_frequency, note)
+    StartTXTFile(filename, timestamp, sample, channel, payload, number_of_experiments, max_batch_size, use_batch_average, magnet_current, LO_frequency, LO_power, note)
 
     for i in range(0, number_of_experiments, max_batch_size):
         batch_size = min(max_batch_size, number_of_experiments - i) # number of experiments in this batch
         new_payload = payload.copy() # copy the original payload
         new_payload['number_of_expt'] = batch_size # set the number of experiments in this batch
 
-        # check the status of the LO device, if it is too hot, wait for it to cool down
-        (LO_temp, LO_rf_params, LO_status) =  GetLOStatus(LO_inst)
-        if LO_temp > 50:
-            TurnOffLO(LO_inst)
-            print(f"Local oscillator temperature is too high: {LO_temp} degC. Waiting for it to cool down...")
+        # do the checks for the LO and the magnet ONLY if we are reading from ADC_D (channel 0)
+        if channel == 0:
+            # check the status of the LO device, if it is too hot, wait for it to cool down
+            (LO_temp, LO_rf_params, LO_status) =  GetLOStatus(LO_inst)
+            if LO_temp > 50:
+                TurnOffLO(LO_inst)
+                print(f"Local oscillator temperature is too high: {LO_temp} degC. Waiting for it to cool down...")
 
-            # wait until the temperature is below 50 degC
-            while LO_temp > 50:
-                time.sleep(5)
+                # wait until the temperature is below 50 degC
+                while LO_temp > 50:
+                    time.sleep(5)
+                    (LO_temp, LO_rf_params, LO_status) = GetLOStatus(LO_inst)
+
+                # turn the LO back on after cooling down
+                TurnOnLO(LO_inst, freq = LO_frequency, power = LO_power)
+                time.sleep(1)
+
+                # check if the LO parameters are set correctly
                 (LO_temp, LO_rf_params, LO_status) = GetLOStatus(LO_inst)
-
-            # turn the LO back on after cooling down
-            TurnOnLO(LO_inst, freq = LO_frequency, power = LO_power)
-            time.sleep(1)
-
-            # check if the LO parameters are set correctly
-            (LO_temp, LO_rf_params, LO_status) = GetLOStatus(LO_inst)
-            if ((np.abs(LO_rf_params["rf1_freq"] - LO_frequency) > 1e-9) or (np.abs(LO_rf_params["rf1_level"] - LO_power) > 1e-3) or not LO_status["rf1_out_enable"] or LO_status["rf1_standby"]):
+                if ((np.abs(LO_rf_params["rf1_freq"] - LO_frequency) > 1e-9) or (np.abs(LO_rf_params["rf1_level"] - LO_power) > 1e-3) or not LO_status["rf1_out_enable"] or LO_status["rf1_standby"]):
+                    TurnOffLO(LO_inst)
+                    raise RuntimeError("Local oscillator parameters are not set correctly. Please check the settings.")
+            elif ((np.abs(LO_rf_params["rf1_freq"] - LO_frequency) > 1e-9) or (np.abs(LO_rf_params["rf1_level"] - LO_power) > 1e-3) or not LO_status["rf1_out_enable"] or LO_status["rf1_standby"]):
+                print("Local oscillator parameters are not set correctly. Turning it off and trying again...")
                 TurnOffLO(LO_inst)
-                raise RuntimeError("Local oscillator parameters are not set correctly. Please check the settings.")
-        elif ((np.abs(LO_rf_params["rf1_freq"] - LO_frequency) > 1e-9) or (np.abs(LO_rf_params["rf1_level"] - LO_power) > 1e-3) or not LO_status["rf1_out_enable"] or LO_status["rf1_standby"]):
-            print("Local oscillator parameters are not set correctly. Turning it off and trying again...")
-            TurnOffLO(LO_inst)
-            TurnOnLO(LO_inst, freq = LO_frequency, power = LO_power)
-            time.sleep(1)
+                TurnOnLO(LO_inst, freq = LO_frequency, power = LO_power)
+                time.sleep(1)
+                
+                # if still not set correctly, raise an error
+                (LO_temp, LO_rf_params, LO_status) = GetLOStatus(LO_inst)
+                if ((np.abs(LO_rf_params["rf1_freq"] - LO_frequency) > 1e-9) or (np.abs(LO_rf_params["rf1_level"] - LO_power) > 1e-3) or not LO_status["rf1_out_enable"] or LO_status["rf1_standby"]):
+                    TurnOffLO(LO_inst)
+                    raise RuntimeError("Local oscillator parameters are not set correctly. Please check the settings.")
             
-            # if still not set correctly, raise an error
-            (LO_temp, LO_rf_params, LO_status) = GetLOStatus(LO_inst)
-            if ((np.abs(LO_rf_params["rf1_freq"] - LO_frequency) > 1e-9) or (np.abs(LO_rf_params["rf1_level"] - LO_power) > 1e-3) or not LO_status["rf1_out_enable"] or LO_status["rf1_standby"]):
-                TurnOffLO(LO_inst)
-                raise RuntimeError("Local oscillator parameters are not set correctly. Please check the settings.")
-        
-        # check the status of the magnet, if it is not set to the desired current, try again
-        curr_read = float(magnet_inst.get_current())
-        if abs(curr_read - magnet_current) > 0.001:
-            RampMagnetCurrent(magnet_inst, magnet_current)
-            time.sleep(5)  # wait for the magnet to stabilize
+            # check the status of the magnet, if it is not set to the desired current, try again
             curr_read = float(magnet_inst.get_current())
-            
             if abs(curr_read - magnet_current) > 0.001:
-                raise RuntimeError("Magnet current not set correctly. Please check the settings.")
+                RampMagnet(magnet_inst, magnet_current)
+                time.sleep(5)  # wait for the magnet to stabilize
+                curr_read = float(magnet_inst.get_current())
+                
+                if abs(curr_read - magnet_current) > 0.001:
+                    raise RuntimeError("Magnet current not set correctly. Please check the settings.")
 
         print(f"Sending batch of {batch_size} experiments...")
 
@@ -430,84 +484,55 @@ def main(timestamp, sample, pulse_type = "gaussian", pulse_frequency = 120, puls
             print("Response body:", response.text)
             raise RuntimeError("Failed request")
         
-        # get the response and parse it
-        response_ch0_I = np.array(response.json()['ch0_I'])
-        response_ch0_Q = np.array(response.json()['ch0_Q'])
-        response_ch1_I = np.array(response.json()['ch1_I'])  
-        response_ch1_Q = np.array(response.json()['ch1_Q'])
-
+        response = np.array(response.json()['array'])  # convert the response to JSON format and parse it
         print(f"Batch {i // max_batch_size + 1} acquired successfully.")
         
         if i == 0:
-            time_row = response_ch0_I[-1] * 1e3 # the last row is the time row, we take it only once, convert it to ns
+            time_row = response[-1] * 1e3  # the last row is the time row, we take it only once, convert it to ns
         
-        data_part_ch0_I = response_ch0_I[:-1]
-        data_part_ch0_Q = response_ch0_Q[:-1]
-        data_part_ch1_I = response_ch1_I[:-1]
-        data_part_ch1_Q = response_ch1_Q[:-1]
+        data_part = response[:-1]  # all but the last row, which is the time row
+
+        filtered_data_part = ApplyNotchFilter(data_part, notch_filters)  # apply the notch filter to the data part
 
         if use_batch_average:
             # if we are using batch averaging, we take the average of the data part
-            avg_data_ch0_I = np.mean(data_part_ch0_I, axis=0)
-            avg_data_ch0_Q = np.mean(data_part_ch0_Q, axis=0)
-            avg_data_ch1_I = np.mean(data_part_ch1_I, axis=0)
-            avg_data_ch1_Q = np.mean(data_part_ch1_Q, axis=0)
+            avg_data = np.mean(filtered_data_part, axis = 0)
+            all_batches_data.append(avg_data[np.newaxis, :])
 
-            all_batches_data_ch0_I.append(avg_data_ch0_I[np.newaxis, :])
-            all_batches_data_ch0_Q.append(avg_data_ch0_Q[np.newaxis, :])
-            all_batches_data_ch1_I.append(avg_data_ch1_I[np.newaxis, :])
-            all_batches_data_ch1_Q.append(avg_data_ch1_Q[np.newaxis, :])
-
-            AppendToTXTFile(filename, data_type = "array", data = np.array([avg_data_ch0_I[np.newaxis, :], avg_data_ch0_Q[np.newaxis, :], avg_data_ch1_I[np.newaxis, :], avg_data_ch1_Q[np.newaxis, :]]))
+            AppendToTXTFile(filename, avg_data[np.newaxis, :])  # append the average data row to the .txt file
         else:
             # if we are not using batch averaging, we append the whole data part to the all_batches_data
-            all_batches_data_ch0_I.extend(data_part_ch0_I)
-            all_batches_data_ch0_Q.extend(data_part_ch0_Q)
-            all_batches_data_ch1_I.extend(data_part_ch1_I)
-            all_batches_data_ch1_Q.extend(data_part_ch1_Q)
+            all_batches_data.extend(filtered_data_part)
 
-            AppendToTXTFile(filename, data_type = "array", data = np.array([data_part_ch0_I, data_part_ch0_Q, data_part_ch1_I, data_part_ch1_Q]))
-
+            AppendToTXTFile(filename, filtered_data_part)  # append the whole data array to the .txt file
+    
         print(f"Batch {i // max_batch_size + 1} processed successfully")
         time.sleep(1)  # wait for a bit to avoid overwhelming the server
-
-    all_batches_data_ch0_I = np.array(all_batches_data_ch0_I)
-    all_batches_data_ch0_Q = np.array(all_batches_data_ch0_Q)
-    all_batches_data_ch1_I = np.array(all_batches_data_ch1_I)
-    all_batches_data_ch1_Q = np.array(all_batches_data_ch1_Q)
+    
+    all_batches_data = np.array(all_batches_data)  # convert the list of arrays to a single numpy array
 
     # calculate the grand average of all batches
     if use_batch_average:
-        grand_average_ch0_I = np.mean(all_batches_data_ch0_I, axis=0)[0]
-        grand_average_ch0_Q = np.mean(all_batches_data_ch0_Q, axis=0)[0]
-        grand_average_ch1_I = np.mean(all_batches_data_ch1_I, axis=0)[0]
-        grand_average_ch1_Q = np.mean(all_batches_data_ch1_Q, axis=0)[0]
+        grand_average = np.mean(all_batches_data, axis=0)[0]
     else:
-        grand_average_ch0_I = np.mean(all_batches_data_ch0_I, axis=0)
-        grand_average_ch0_Q = np.mean(all_batches_data_ch0_Q, axis=0)
-        grand_average_ch1_I = np.mean(all_batches_data_ch1_I, axis=0)
-        grand_average_ch1_Q = np.mean(all_batches_data_ch1_Q, axis=0)
+        grand_average = np.mean(all_batches_data, axis=0)
 
     # append the final average data and the time row to the .txt file
-    AppendToTXTFile(filename, data_type = "array", data = np.array([grand_average_ch0_I[np.newaxis, :], grand_average_ch0_Q[np.newaxis, :],
-                                        grand_average_ch1_I[np.newaxis, :], grand_average_ch1_Q[np.newaxis, :]]))
-    AppendToTXTFile(filename, data_type = "time", data = time_row[np.newaxis, :])
+    AppendToTXTFile(filename, grand_average[np.newaxis, :])
+    AppendToTXTFile(filename, time_row[np.newaxis, :])
 
     # plot the final readout and PSD of the averaged data
-    PlotReadout(np.abs(grand_average_ch0_I + 1j * grand_average_ch0_Q), time_row, filename, number_of_experiments, channel = 0)
-    # PlotReadout(np.abs(grand_average_ch1_I + 1j * grand_average_ch1_Q), time_row, filename, number_of_experiments, channel = 1)
-    PlotPSD(np.abs(grand_average_ch0_I + 1j * grand_average_ch0_Q), filename, fs, number_of_experiments, channel = 0)
-    # PlotPSD(np.abs(grand_average_ch1_I + 1j * grand_average_ch1_Q), filename, fs, number_of_experiments, channel = 1)
+    PlotReadout(grand_average, time_row, filename, number_of_experiments, 9999)
+    PlotPSD(grand_average, filename, fs, number_of_experiments, 9999)
 
     # calculate the SNR of the averaged data
-    snr_ch0, snr_dB_ch0 = CalculateSNR(np.abs(grand_average_ch0_I + 1j * grand_average_ch0_Q))
-    print(f"Channel 0 SNR (linear): {snr_ch0:.2f}, SNR (dB): {snr_dB_ch0:.2f} dB")
-    snr_ch1, snr_dB_ch1 = CalculateSNR(np.abs(grand_average_ch1_I + 1j * grand_average_ch1_Q))
-    print(f"Channel 1 SNR (linear): {snr_ch1:.2f}, SNR (dB): {snr_dB_ch1:.2f} dB")
+    snr, snr_dB = CalculateSNR(grand_average)
+    print(f"SNR (linear): {snr:.2f}, SNR (dB): {snr_dB:.2f} dB")
 
-    RampMagnetCurrent(magnet_inst, 0.0)  # turn off the magnet after all experiments are done
+    if channel == 0:
+        RampMagnet(magnet_inst, 0.0)  # turn off the magnet after all experiments are done
 
-    TurnOffLO(LO_inst)  # turn off the local oscillator after all experiments are done
+        TurnOffLO(LO_inst)  # turn off the local oscillator after all experiments are done
     
 """
 This final part is just for future use of this code. When you run this file,
@@ -529,22 +554,23 @@ if __name__ == "__main__":
         main(
             timestamp = timestamp,                                      # current time, labeling purposes
             sample = "2024-Feb-Argn-YIG-2_5b-b1",                       # sample name, labeling purposes
+            channel = 0,                                                # which ADC channel to read, 0 for ADC_D (sample), 1 for ADC_C (loopback). in the loopback mode, LO and the magnet are disabled
             pulse_type = "flat_top",                                    # type of the pulse, can be "gaussian", "flat_top" or "const"
-            pulse_frequency = 5383,                                      # pulse frequency in MHz, same for both DACs
-            pulse_width = 10,                                           # pulse width in "weird" units, see the comments in the main function
-            read_frequency = 5383,                                      # frequency used to downconvert the signal
+            pulse_frequency = 120,                                      # pulse frequency in MHz, same for both DACs
+            pulse_width = 10,                                           # pulse width in "weird" units, see the comments in the main function  
+            pulse_amplitude = 30000,                                    # pulse amplitude in DAC units, 30000 is the maximum amplitude 
             magnet_inst = magnet_instance,                              # instance of the magnet control class, technical purposes   
             magnet_current = -3.0,                                      # current to set the magnet to, in Amperes
             LO_inst = LO_instance,                                      # instance of the local oscillator control class, technical purposes
             LO_frequency = 5.263,                                       # local oscillator frequency in GHz
-            LO_power = 0.0,                                            # local oscillator power in dBm
-            number_of_experiments = 300,                                # total number of experiments
+            LO_power = 17.0,                                            # local oscillator power in dBm
+            number_of_experiments = 1000,                                # total number of experiments
             max_batch_size = 1000,                                      # maximum number of experiments in one batch (in one go)
             use_batch_average = False,                                  # whether to average batches of experiments or not
-            note = "decimated test second case: upconverting outside the board, rf amp, downconverting to 120 outside, IF amplifier"                              # notes for the experiment, labeling purposes
+            note = "new pulse freq test run, with amplifiers and BPF"   # notes for the experiment, labeling purposes
         )
     finally:
-        RampMagnetCurrent(magnet_instance, 0.0)  # double check that the magnet is turned off
+        RampMagnet(magnet_instance, 0.0)  # double check that the magnet is turned off
 
         TurnOffLO(LO_instance)  # double check that the local oscillator is turned off
 

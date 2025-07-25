@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from scipy.signal import welch
 import time
 import json
-from magnet_lib import Kepco
+from kepco_lib import Kepco
 from sc5511a_lib import SC5511A
 from bnc_lib import SignalGenerator855B
 
