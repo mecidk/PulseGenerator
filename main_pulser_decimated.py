@@ -2,6 +2,8 @@
 
 import sys
 import json
+import gc
+import time
 
 from qick import * # type: ignore
 from qick_training import * # type: ignore
@@ -133,15 +135,38 @@ class PulseSequence(AveragerProgram): # type: ignore
         self.wait_all()
         self.sync_all(self.us2cycles(self.cfg["relax_delay"]))
 
-def GeneratePulse(pulse_type = "gaussian", freq = 1000, width = 10, pulse_count = 1, trig_delay = 1, no_of_expt = 1, read_freq = 10):
-    # transfer the input parameters to local variables
-    q1_pulse_freq = freq 
+def main():
+    
+    # get the data from the server.py call
+    data = json.load(sys.stdin)
+    pulse_type = data.get("type")
+    pulse_frequency = data.get("freq")
+    pulse_width = data.get("width") # in ns
+    pulse_amplitude = data.get("amplitude") # in DAC units
+    pulse_count = data.get("pulse_count")
+    trigger_delay = data.get("trigger_delay")
+    number_of_expt = data.get("number_of_expt")
+    max_batch_size = data.get("max_batch_size", 1000) # default is 1000
+    read_freq = data.get("read_freq")
+
+    # safety checks for the input parameters
+    if max_batch_size <= 0 or max_batch_size > 3000:
+        max_batch_size = 1000
+    if pulse_type not in ["gaussian", "flat_top", "const"]:
+        pulse_type = "gaussian"
+    if pulse_frequency < 0 or pulse_frequency > 9800:
+        pulse_frequency = 100
+    if pulse_amplitude < 0 or pulse_amplitude > 32767:
+        pulse_amplitude = 30000
+    if pulse_width < 0 or pulse_width > 50:
+        pulse_width = 10
+
+    q1_pulse_freq = pulse_frequency
     q1_read_freq = read_freq
-    q2_pulse_freq = freq 
-    q2_read_freq = freq
-    
-    pi_sigma_width = width * 1e-3
-    
+    q2_pulse_freq = pulse_frequency
+    q2_read_freq = pulse_frequency
+    pi_sigma_width = pulse_width * 1e-3
+
     # set up the config which is the main argument for QICK programs (default is for gaussian pulses)
     config = {"q1_ch": 0,
               "q2_ch": 1,
@@ -155,18 +180,18 @@ def GeneratePulse(pulse_type = "gaussian", freq = 1000, width = 10, pulse_count 
               "length": soc.us2cycles(pi_sigma_width, gen_ch=0) * 4, # factor of 4 is since the length parameter does not work with standard deviation, but with the full width of the pulse
               "pi_sigma": soc.us2cycles(pi_sigma_width, gen_ch=0), # standard deviation of the pulse in cycles
               "readout_length": soc.us2cycles(1, ro_ch=0), # in cycles
-              "pi_gain": 30000, # in DAC units
-              "pi_2_gain": 15000,
+              "pi_gain": pulse_amplitude, # in DAC units
+              "pi_2_gain": pulse_amplitude,
               "q1_pulse_freq": q1_pulse_freq, # in MHz
               "q2_pulse_freq": q2_pulse_freq, # in MHz
               "q1_read_freq": q1_read_freq,
               "q2_read_freq": q2_read_freq,
-              "adc_trig_offset": soc.us2cycles(trig_delay, ro_ch=0), # delay for the ADC trigger in cycles
+              "adc_trig_offset": soc.us2cycles(trigger_delay, ro_ch=0), # delay for the ADC trigger in cycles
               "soft_avgs": 1,
               "expts": 1
               }
     
-    # edit the config if the pulse type is flat top or constant(i.e. square)
+    # edit the config if the pulse type is flat_top or constant
     if pulse_type == "flat_top":
         config["pulse_style"] = "flat_top"
         config["pi_sigma"] = 3  # shortest possible transition time for flat top pulse
@@ -174,46 +199,54 @@ def GeneratePulse(pulse_type = "gaussian", freq = 1000, width = 10, pulse_count 
         config["pulse_style"] = "const"
       
     config["gate_set"] = generate_2qgateset(config)
-    
+
     # get the desired sequence of gates (pi pulses). for now, only X gates are applied.
     config['gate_seq'] = [{'Q1': 'X', 'Q2': 'X'}] * pulse_count
 
     prog = PulseSequence(soccfg, config) # initiate the pulse program which does everything
-    
-    readout = []
-    
-    for _ in range(no_of_expt):
-        soc.reset_gens() # clear out any DC or periodic values from the generator channels
-        iq_list = prog.acquire_decimated(soc, load_pulses=True, progress=False)
-        readout.append(iq_list) 
-    
-    return np.array(readout)
 
-def main():
-    
-    # get the data from the server.py call
-    data = json.load(sys.stdin)
-    pulse_type = data.get("type")
-    pulse_frequency = data.get("freq")
-    pulse_width = data.get("width") # in ns
-    pulse_count = data.get("pulse_count")
-    trigger_delay = data.get("trigger_delay")
-    number_of_expt = data.get("number_of_expt")
-    read_freq = data.get("read_freq")
+    # acquire a single shot to define time row
+    soc.reset_gens() # clear out any DC or periodic values from the generator channels
+    iq_sample = prog.acquire_decimated(soc, load_pulses=True, progress=False)
+    time_row = soc.cycles2us(np.arange(0, len(iq_sample[0, 0])), ro_ch=0)
 
-    readout = GeneratePulse(pulse_type, pulse_frequency, pulse_width, pulse_count, trigger_delay, number_of_expt, read_freq) # execute the main function
+    # do the measurement in batches to avoid memory issues
+    print("[", flush=True)
 
-    time_row = soc.cycles2us(np.arange(0, len(readout[0, 0, 0])), ro_ch=0)  # create the timestamps for each sample
-    
-    # create the response
-    result = {
-        "ch0_I": np.vstack((readout[:, 0, 0], time_row)).tolist(),
-        "ch0_Q": np.vstack((readout[:, 0, 1], time_row)).tolist(),
-        "ch1_I": np.vstack((readout[:, 1, 0], time_row)).tolist(),
-        "ch1_Q": np.vstack((readout[:, 1, 1], time_row)).tolist()
-    }
-    
-    json.dump(result, sys.stdout) # send the response to the handler (server.py)
+    for i in range(0, number_of_expt, max_batch_size):
+        this_batch = min(max_batch_size, number_of_expt - i)
+
+        ch0_I = []
+        ch0_Q = []
+        ch1_I = []
+        ch1_Q = []
+
+        for _ in range(this_batch):
+            soc.reset_gens()
+            iq = prog.acquire_decimated(soc, load_pulses=False, progress=False)
+            ch0_I.append(iq[0, 0].tolist())
+            ch0_Q.append(iq[0, 1].tolist())
+            ch1_I.append(iq[1, 0].tolist())
+            ch1_Q.append(iq[1, 1].tolist())
+
+        batch_result = {
+            "batch_index": i // max_batch_size,
+            "ch0_I": ch0_I,
+            "ch0_Q": ch0_Q,
+            "ch1_I": ch1_I,
+            "ch1_Q": ch1_Q,
+            "time_row": time_row.tolist() if i == 0 else None
+        }
+
+        json.dump(batch_result, sys.stdout)
+        print("", flush=True)
+
+        # clean up to avoid memory issues
+        del ch0_I, ch0_Q, ch1_I, ch1_Q, iq
+        gc.collect()
+        time.sleep(0.1)
+
+    print("]", flush=True)
 
 if __name__ == "__main__":
     main()

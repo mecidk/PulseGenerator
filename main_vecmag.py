@@ -4,10 +4,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.signal import iirnotch, filtfilt, welch
 import time
-from kepco_lib import Kepco
+from vectormagnet_lib import MSS_Control
 from sc5511a_lib import SC5511A
 from bnc_lib import SignalGenerator855B
-from vectormagnet_lib import MSS_Control
 
 def PlotReadout(read, time_row, filename, no_of_experiments, channel):
     
@@ -78,7 +77,7 @@ def CalculateSNR(signal):
 
     return snr, snr_dB
 
-def StartTXTFile(filename, timestamp, sample, channel, payload, number_of_experiments, max_batch_size, use_batch_average, magnet_current, LO_frequency,  LO_power, note):
+def StartTXTFile(filename, timestamp, sample, channel, payload, number_of_experiments, max_batch_size, use_batch_average, magnet_field, magnet_field_rate, LO_frequency,  LO_power, note):
     
     """
     This function initiates a .txt file with a header containing metadata about the experiment.
@@ -94,7 +93,8 @@ def StartTXTFile(filename, timestamp, sample, channel, payload, number_of_experi
     
     if channel == 0:
         file.write(f"# LO Frequency and Power: {LO_frequency} GHz, {LO_power} dBm #\n")
-        file.write(f"# Magnet Current: {magnet_current} A #\n")
+        file.write(f"# Magnet Field: {magnet_field} T #\n")
+        file.write(f"# Magnet Field Rate: {magnet_field_rate} T/s #\n")
     else:
         file.write("# LO and Magnet are disabled in loopback mode #\n")
     
@@ -169,37 +169,26 @@ def ApplyNotchFilter(raw_signal, filter_coeff):
     
     return filtered_signal
 
-def InitializeMagnet(magnet_type = ""):
+def InitializeMagnet():
 
     """
     This function initializes the magnet by creating an instance of the Kepco class.
     It sets the mode to current and powers on the magnet. It then retuns the magnet instance.
     """
 
-    if magnet_type == "Kepco":
-        GPIB_channel = 1
-        magnet_instance = Kepco(GPIB_channel)
-        magnet_instance.kepinit()  # initialize the Kepco instance
-        magnet_instance.mode_current()  # set the mode to current
-        magnet_instance.power_on()  # power on the magnet
-
-    elif magnet_type == "Vectormagnet":
-        magnet_instance = MSS_Control()
-        magnet_instance.connect()
-
-    else:
-        raise ValueError("Unsupported magnet type. Please use 'Kepco' or 'Vectormagnet'")
+    magnet_instance = MSS_Control()
+    magnet_instance.connect()
 
     return magnet_instance
 
-def SetTemperature(magnet_instance, target_temp = 0.0):
+def SetTemperature(instance, target_temp = 0.0):
 
     """
     This function sets the temperature of the magnet to the desired value.
     It takes the instance of the magnet class and the target temperature as input.
     """
 
-    if not isinstance(magnet_instance, MSS_Control):
+    if not isinstance(instance, MSS_Control):
         raise TypeError("Unsupported magnet instance. Please use an instance of MSS_Control for temperature control.")
 
     # set the temperature offset based on the target temperature
@@ -215,84 +204,66 @@ def SetTemperature(magnet_instance, target_temp = 0.0):
         raise ValueError("Target temperature must be greater than 0 K")
 
     # set the temperature of the magnet
-    magnet_instance.VTI_set1(target_temp-temp_offset)
-    magnet_instance.VTI_set2(target_temp)
+    instance.VTI_set1(target_temp-temp_offset)
+    instance.VTI_set2(target_temp)
 
     # check if the setpoint is correctly set
-    if magnet_instance.VTI_getsetpoint2() != target_temp:
+    if instance.VTI_getsetpoint2() != target_temp:
         print("Setting temperature failed, retrying...")
-        SetTemperature(magnet_instance, target_temp)
+        SetTemperature(instance, target_temp)
     
     time.sleep(5) # wait for the temperature to stabilize
 
     # wait until the temperature is within 0.02 K of the target temperature
     flag = 1        
     while flag:
-        temp_0 = magnet_instance.VTI_getsensB() # get the current temperature reading
+        temp_0 = instance.VTI_getsensB() # get the current temperature reading
         d_temp = target_temp-temp_0 # calculate the error
 
-        if abs(target_temp-temp_0) < 0.02:
+        if np.abs(d_temp) < 0.02:
             flag = 0
-        elif abs(d_temp) > 0.02:
+        elif np.abs(d_temp) > 0.02:
             time.sleep(10)
             print(f"Temperature is not within 0.02 K of the target temperature. Current temperature: {temp_0} K, Target temperature: {target_temp} K. Waiting...")
     
-    return magnet_instance.VTI_getsensB()  # return the current temperature reading
+    return instance.VTI_getsensB()  # return the current temperature reading
 
-def RampMagnet(instance, current = 0.0, field_rate = 0.1, target_field = 0.0):
+def RampMagnet(instance, target_field = 0.1, field_rate = 0.0):
 
     """
     This function ramps the magnet current to the desired value.
-    If you are using Kepco, you need to specify the current only.
-    If you are using Vectormagnet, you need to specify the field rate and target field.
+    It takes the instance of the magnet class, the target field in Tesla, and the field rate in T/s as input.
     """
-    
-    if isinstance(instance, Kepco):
-        print(f"Ramping current to {current} A")
-        instance.ramp_current(float(instance.get_current()), current, 0.01, 0.05) # set the current to the desired value by ramping
-        print(f"Current ramped to {current} A")
 
-        # check if the current read is within the expected range
-        curr_read = float(instance.get_current())
-        if abs(curr_read - current) > 0.001:
-            print("Current read is not within the expected range. Retrying...")
-            curr_read = RampMagnet(instance, current)
+    print(f"Ramping field to {target_field} T at a rate of {field_rate} T/s")
+    instance.VM_setZRampRate(field_rate)
 
-        print(f"Current read: {curr_read} A")
+    instance.VM_setZTargetField(target_field)
+    time.sleep(1)
 
-        return curr_read
-    
-    elif isinstance(instance, MSS_Control):
-        print(f"Ramping field to {target_field} T at a rate of {field_rate} T/s")
-        instance.VM_setZRampRate(field_rate)
+    instance.VM_setCalculatePath(True)
+    time.sleep(1)
 
-        instance.VM_setZTargetField(target_field)
-        time.sleep(1)
+    instance.VM_setRamp()
 
-        instance.VM_setCalculatePath(True)
-        time.sleep(1)
+    countdown = instance.VM_getCountdown()    
+    while countdown > 1:
+        time.sleep(5)
+        countdown = instance.VM_getCountdown()
+        print(f"Countdown: {countdown} seconds remaining")
 
-        instance.VM_setRamp()
+    time.sleep(10)
+    print("Ramp complete")
 
-        countdown = instance.VM_getCountdown()    
-        while countdown > 1:
-            time.sleep(5)
-            countdown = instance.VM_getCountdown()
-            print(f"Countdown: {countdown} seconds remaining")
+    # check if the field read is within the expected range
+    bx, by, bz = instance.TMon_getHallField()
+    bx = float(bx); by = float(by); bz = float(bz)
+    if np.abs(bz - target_field) > 1e-3:
+        print("Field read is not within the expected range. Retrying...")
+        bz = RampMagnet(instance, target_field, field_rate)
 
-        print("Ramp complete")
-
-        # check if the field read is within the expected range
-        bx, by, bz = instance.TMon_getHallField() # (T)
-        bx = float(bx); by = float(by); bz = float(bz)
-        if abs(bz - target_field) > 0.001:
-            print("Field read is not within the expected range. Retrying...")
-            bz = RampMagnet(instance, current)
-
-        print(f"Field read: {bz} T")
-        return bz  # return the field read in Tesla
-    else:
-        raise TypeError("Unsupported magnet instance. Please use an instance of Kepco or MSS_Control")
+    print(f"Field read: {bz} T")
+    return bz  # return the field read in Tesla
 
 def InitializeLO(LO_type = ""):
 
@@ -437,7 +408,7 @@ def GetLOStatus(instance):
     return temperature, rf_params, device_status
 
 def main(timestamp, sample, channel = 0, pulse_type = "gaussian", pulse_frequency = 120, pulse_width = 15, 
-         pulse_amplitude = 30000, magnet_inst = None, magnet_current = 0.0, LO_inst = None, LO_frequency = 5.0, 
+         pulse_amplitude = 30000, magnet_inst = None, magnet_field = 0.0, magnet_field_rate = 0.005, LO_inst = None, LO_frequency = 5.0, 
          LO_power = 0.0, number_of_experiments = 1000, max_batch_size = 1000, use_batch_average = True,  note = ""):
 
     """
@@ -462,10 +433,10 @@ def main(timestamp, sample, channel = 0, pulse_type = "gaussian", pulse_frequenc
     if channel == 1:
         print("Warning: Loopback ADC is selected, LO and magnet will be disabled.")
     elif channel == 0:
-        current_read = RampMagnet(magnet_inst, magnet_current)  # turn on the magnet with specified current
+        field_read = RampMagnet(magnet_inst, magnet_field, magnet_field_rate)  # turn on the magnet with specified field and rate
         time.sleep(5)  # wait for the magnet to stabilize
-        if abs(current_read - magnet_current) > 0.001:  # check if the current is set correctly
-            raise RuntimeError("Magnet current not set correctly.")
+        if abs(field_read - magnet_field) > 0.001:  # check if the field is set correctly
+            raise RuntimeError("Magnet field not set correctly.")
 
         TurnOnLO(LO_inst, freq = LO_frequency, power = LO_power)  # turn on the local oscillator with the specified frequency and power
         time.sleep(1)  # wait for the LO to stabilize
@@ -507,12 +478,12 @@ def main(timestamp, sample, channel = 0, pulse_type = "gaussian", pulse_frequenc
 
     # define a filename to be used
     if channel == 0:
-        filename = f"{timestamp}_Sample={sample}_Pulse={pulse_type}_{payload['freq']}MHz_AvgN={number_of_experiments}_MagnetI={magnet_current}_A"
+        filename = f"{timestamp}_Sample={sample}_Pulse={pulse_type}_{payload['freq']}MHz_AvgN={number_of_experiments}_MagnetI={magnet_field}_T"
     else:
         filename = f"{timestamp}_Sample={sample}_Pulse={pulse_type}_{payload['freq']}MHz_AvgN={number_of_experiments}_Loopback"
 
     # export the data to a .txt file
-    StartTXTFile(filename, timestamp, sample, channel, payload, number_of_experiments, max_batch_size, use_batch_average, magnet_current, LO_frequency, LO_power, note)
+    StartTXTFile(filename, timestamp, sample, channel, payload, number_of_experiments, max_batch_size, use_batch_average, magnet_field, magnet_field_rate, LO_frequency, LO_power, note)
 
     for i in range(0, number_of_experiments, max_batch_size):
         batch_size = min(max_batch_size, number_of_experiments - i) # number of experiments in this batch
@@ -554,13 +525,15 @@ def main(timestamp, sample, channel = 0, pulse_type = "gaussian", pulse_frequenc
                     raise RuntimeError("Local oscillator parameters are not set correctly. Please check the settings.")
             
             # check the status of the magnet, if it is not set to the desired current, try again
-            curr_read = float(magnet_inst.get_current())
-            if abs(curr_read - magnet_current) > 0.001:
-                RampMagnet(magnet_inst, magnet_current)
-                time.sleep(5)  # wait for the magnet to stabilize
-                curr_read = float(magnet_inst.get_current())
-                
-                if abs(curr_read - magnet_current) > 0.001:
+            bx, by, bz = magnet_inst.TMon_getHallField()
+            bx = float(bx); by = float(by); bz = float(bz)
+            if np.abs(bz - magnet_field) > 1e-3:
+                bz = RampMagnet(magnet_inst, magnet_field, magnet_field_rate)
+                time.sleep(5)
+                bx, by, bz = magnet_inst.TMon_getHallField()
+                bx = float(bx); by = float(by); bz = float(bz)
+
+                if abs(bz - magnet_field) > 1e-3:
                     raise RuntimeError("Magnet current not set correctly. Please check the settings.")
 
         print(f"Sending batch of {batch_size} experiments...")
@@ -620,7 +593,7 @@ def main(timestamp, sample, channel = 0, pulse_type = "gaussian", pulse_frequenc
     print(f"SNR (linear): {snr:.2f}, SNR (dB): {snr_dB:.2f} dB")
 
     if channel == 0:
-        RampMagnet(magnet_inst, 0.0)  # turn off the magnet after all experiments are done
+        RampMagnet(magnet_inst, 0.0, 0.2)  # turn off the magnet after all experiments are done
 
         TurnOffLO(LO_inst)  # turn off the local oscillator after all experiments are done
     
@@ -634,7 +607,9 @@ you need to call the function. This is to make the integration smoother.
 if __name__ == "__main__":
     startt = time.time()
 
-    magnet_instance = InitializeMagnet(GPIB_channel = 1)  # initialize the magnet
+    magnet_instance = InitializeMagnet()  # initialize the magnet
+
+    SetTemperature(magnet_instance, target_temp = 300)  # set the temperature of the magnet to 300 K
 
     LO_instance = InitializeLO(LO_type = "SC5511A")  # initialize local oscillator, can be "SC5511A" or "BNC855B"
 
@@ -648,19 +623,20 @@ if __name__ == "__main__":
             pulse_type = "flat_top",                                    # type of the pulse, can be "gaussian", "flat_top" or "const"
             pulse_frequency = 120,                                      # pulse frequency in MHz, same for both DACs
             pulse_width = 10,                                           # pulse width in "weird" units, see the comments in the main function  
-            pulse_amplitude = 30000,                                    # pulse amplitude in DAC units, 30000 is the maximum amplitude 
-            magnet_inst = magnet_instance,                              # instance of the magnet control class, technical purposes   
-            magnet_current = -3.0,                                      # current to set the magnet to, in Amperes
+            pulse_amplitude = 30000,                                    # pulse amplitude in DAC units, 30000 is the maximum amplitude
+            magnet_inst = magnet_instance,                              # instance of the magnet control class, technical purposes
+            magnet_field = 0.5,                                         # magnetic field to set the magnet to, in Tesla
+            magnet_field_rate = 0.005,                                  # rate of the magnet field ramping in Tesla per second
             LO_inst = LO_instance,                                      # instance of the local oscillator control class, technical purposes
             LO_frequency = 5.263,                                       # local oscillator frequency in GHz
             LO_power = 17.0,                                            # local oscillator power in dBm
-            number_of_experiments = 1000,                                # total number of experiments
+            number_of_experiments = 1000,                               # total number of experiments
             max_batch_size = 1000,                                      # maximum number of experiments in one batch (in one go)
             use_batch_average = False,                                  # whether to average batches of experiments or not
             note = "new pulse freq test run, with amplifiers and BPF"   # notes for the experiment, labeling purposes
         )
     finally:
-        RampMagnet(magnet_instance, 0.0)  # double check that the magnet is turned off
+        RampMagnet(magnet_instance, 0.0, 0.2)  # double check that the magnet is turned off
 
         TurnOffLO(LO_instance)  # double check that the local oscillator is turned off
 
