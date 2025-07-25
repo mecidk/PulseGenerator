@@ -6,7 +6,6 @@ import gc
 import time
 
 from qick import * # type: ignore
-from drivers.qick_training import * # type: ignore
 from drivers.RBSupport import generate_2qgateset # type: ignore
 
 import numpy as np
